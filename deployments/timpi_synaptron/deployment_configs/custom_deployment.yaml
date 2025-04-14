@@ -1,0 +1,106 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  generateName: timpi-synaptron-
+  labels:
+    app: timpi-synaptron
+spec:
+  selector:
+    matchLabels:
+      app: timpi-synaptron
+  template:
+    metadata:
+      labels:
+        app: timpi-synaptron
+    spec:
+      dnsPolicy: None
+      dnsConfig:
+        nameservers:
+          - 8.8.8.8
+          - 1.1.1.1
+      containers:
+        - name: timpi-synaptron
+          image: docker.io/timpiltd/timpi-synaptron:latest
+          hostNetwork: true
+          env:
+            - name: NAME
+              value: ""  # Auto-injected by UI
+            - name: GUID
+              value: ""  # Auto-injected by UI
+            - name: NVIDIA_VISIBLE_DEVICES
+              value: "1"  # Placeholder, to be set automatically via UI injection
+            - name: CUDA_VISIBLE_DEVICES
+              value: "1"  # Placeholder, to be set automatically via UI injection
+          ports:
+            - containerPort: 80
+          resources:
+            requests:
+              cpu: 4000m
+              memory: 12288M
+              ephemeral-storage: 180G
+            limits:
+              cpu: 4000m
+              memory: 12288M
+              ephemeral-storage: 180G
+              nvidia.com/gpu: 1
+          volumeMounts:
+            - mountPath: /mnt/data
+
+        # ✅ Sidecar for Uptime Kuma Passive Monitoring
+        - name: uptime-monitor
+          image: docker.io/library/python:3.10-bullseye
+          command: [ "/bin/bash", "-c" ]
+          args:
+            - |
+              apt-get update && apt-get install -y iputils-ping curl;
+              echo "🚀 Starting Uptime Kuma Passive Monitor..." | tee -a /tmp/uptime-monitor.log
+              
+              # Fail fast if webserver monitoring is enabled but no port is set
+              if [ "$UPTIME_KUMA_WEBSERVER" = "true" ] && [ -z "$UPTIME_KUMA_WEBSERVER_PORT" ]; then
+                  echo "❌ ERROR: Webserver monitoring is enabled but no port is specified. Exiting..." | tee -a /tmp/uptime-monitor.log
+                  exit 1
+              fi
+              
+              # Download and run the monitoring script
+              mkdir -p /opt/monitoring
+              curl -o /opt/monitoring/uptime_monitor.sh -L "https://raw.githubusercontent.com/helloskyy-io/FluxEdge-Deployment-Toolbox/main/sidecar_containers/uptime_kuma_monitoring/uptime_monitor.sh"
+              chmod +x /opt/monitoring/uptime_monitor.sh
+              /opt/monitoring/uptime_monitor.sh
+          env:
+            - name: UPTIME_KUMA_URL
+              value: ""  # Auto-injected by UI
+            - name: UPTIME_KUMA_PING
+              value: "true"  # Auto-injected by UI
+            - name: UPTIME_KUMA_WEBSERVER
+              value: "false"  # Auto-injected by UI
+            - name: UPTIME_KUMA_WEBSERVER_PORT
+              value: "80"  # Auto-injected by UI
+          resources:
+            requests:
+              cpu: 100m
+              memory: 100M
+              ephemeral-storage: 1G
+            limits:
+              cpu: 100m
+              memory: 100M
+              ephemeral-storage: 1G
+          volumeMounts:
+            - name: uptime-monitor
+              mountPath: /mnt/data
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: timpi-synaptron-service
+  labels:
+    app: timpi-synaptron
+spec:
+  selector:
+    app: timpi-synaptron
+  ports:
+    - name: http
+      protocol: TCP
+      port: 80
+      targetPort: 80
+  type: ClusterIP
