@@ -1,0 +1,64 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  generateName: timpi-synaptron-
+  labels:
+    app: timpi-synaptron
+spec:
+  selector:
+    matchLabels:
+      app: timpi-synaptron
+  template:
+    metadata:
+      labels:
+        app: timpi-synaptron
+    spec:
+      dnsPolicy: None
+      dnsConfig:
+        nameservers:
+          - 8.8.8.8
+          - 1.1.1.1
+      containers:
+        - name: timpi-synaptron
+          image: timpiltd/timpi-synaptron:latest
+          hostNetwork: true
+          env:
+            - name: NAME
+              value: ""  # Auto-injected by UI
+            - name: GUID
+              value: ""  # Auto-injected by UI
+            - name: NVIDIA_VISIBLE_DEVICES
+              value: "1"  # Placeholder, to be set automatically via UI injection
+            - name: CUDA_VISIBLE_DEVICES
+              value: "1"  # Placeholder, to be set automatically via UI injection
+          ports:
+            - containerPort: 80
+          resources:
+            requests:
+              cpu: 4000m
+              memory: 12288M
+              ephemeral-storage: 180G
+            limits:
+              cpu: 4000m
+              memory: 12288M
+              ephemeral-storage: 180G
+              nvidia.com/gpu: 1
+          volumeMounts:
+            - mountPath: /mnt/data
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: timpi-synaptron-service
+  labels:
+    app: timpi-synaptron
+spec:
+  selector:
+    app: timpi-synaptron
+  ports:
+    - name: http
+      protocol: TCP
+      port: 80
+      targetPort: 80
+  type: ClusterIP

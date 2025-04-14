@@ -20,7 +20,7 @@ spec:
           - 1.1.1.1
       containers:
         - name: timpi-synaptron
-          image: timpiltd/timpi-synaptron:latest
+          image: docker.io/timpiltd/timpi-synaptron:latest
           hostNetwork: true
           env:
             - name: NAME
@@ -75,6 +75,18 @@ spec:
               value: "false"  # Auto-injected by UI
             - name: UPTIME_KUMA_WEBSERVER_PORT
               value: "80"  # Auto-injected by UI
+          resources:
+            requests:
+              cpu: 100m
+              memory: 100M
+              ephemeral-storage: 1G
+            limits:
+              cpu: 100m
+              memory: 100M
+              ephemeral-storage: 1G
+          volumeMounts:
+            - name: uptime-monitor
+              mountPath: /mnt/data
 
 ---
 apiVersion: v1
