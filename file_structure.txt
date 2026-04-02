@@ -1,0 +1,36 @@
+# Deploy-A-Saurus File Structure
+
+deploy-a-saurus/                                # Image factory — build recipes for the MDC platform
+│
+├── CLAUDE.md                                   # AI development rules — references DAS standard
+├── README.md                                   # Repo overview, operational instructions, quick start
+├── file_structure.txt                          # This file — repo structure and planning
+│
+├── recipes/                                    # Build recipes (one folder per image)
+│   │
+│   ├── mint-workstation/                       # Phase 0: Linux Mint workstation VM (produces qcow2)
+│   │   ├── recipe.yaml                         # Build definition: base image, ansible roles, vars, versions
+│   │   └── tests/
+│   │       ├── automated.yaml                  # Machine test criteria: boots, apps launch, user rename works
+│   │       └── human.md                        # Human test checklist: manual verification steps
+│   │
+│   ├── kasm-browser/                           # Phase 0: Kasm browser-only container (produces Docker image)
+│   │   ├── recipe.yaml                         # Build definition: base image, ansible roles, vars, versions
+│   │   ├── docker-compose.yaml                 # Compose file for build/test environment
+│   │   ├── Dockerfile                          # Build-time customizations (if needed beyond Ansible)
+│   │   └── tests/
+│   │       ├── automated.yaml                  # Machine test criteria: starts, UI accessible, login works
+│   │       └── human.md                        # Human test checklist: banking sites, credential injection
+│   │
+│   └── ...                                     # Phase 2+: additional workloads (Synaptron, OpenClaw, etc.)
+│
+├── docs/                                       # Operational documentation
+│   └── recipe_format.md                        # How to write a recipe (reference for creating new images)
+│
+└── archive/                                    # Old FluxEdge content (reference only, will be removed)
+    ├── ansible/                                # Old Ansible roles (some may be ported to mdc-ansible-collections)
+    ├── bash/                                   # Old shell scripts
+    ├── deployments/                            # Old K8s deployment manifests
+    ├── sidecar_containers/                     # Old monitoring sidecar
+    ├── README.md                               # Old FluxEdge README
+    └── file_structure.md                       # Old FluxEdge file structure
