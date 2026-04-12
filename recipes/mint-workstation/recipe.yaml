@@ -1,0 +1,52 @@
+---
+# Deploy-A-Saurus Recipe: Mint Workstation
+# Base template for US-located Linux Mint workstations
+# Customers access via Sunshine + Moonlight remote desktop
+
+name: mint-workstation
+description: "Linux Mint Cinnamon workstation with remote access via Sunshine"
+type: vm
+version: 0.1.0
+
+# Base OS (manual install — Mint does not support unattended install)
+base:
+  os: "Linux Mint"
+  edition: "Cinnamon"
+  version: "22.1"
+  iso: "linuxmint-22.1-cinnamon-64bit.iso"
+  install_method: manual
+
+# Template credentials (used during build, renamed at deploy time)
+build:
+  user: das-template
+  password: das-template
+  hostname: das-mint-workstation
+
+# VM hardware specs (used by Temporal to create build VM and customer VMs)
+vm:
+  cores: 8
+  memory: 16384
+  cpu: host
+  bios: ovmf
+  machine: i440fx
+  scsi_controller: virtio-scsi-single
+  disk_size: 100G
+  storage: persistent-rbd
+  os_type: l26
+  network:
+    bridge: vmbr0
+    vlan: 200
+
+# Ansible configuration (run after SSH is available on build VM)
+ansible:
+  playbooks:
+    - skyy_net/common/playbooks/das_mint_workstation_base.yml
+  vars:
+    target_user: das-template
+
+# Artifact storage (after baking)
+artifact:
+  type: ceph-rbd
+  ceph_pool: ssd-pool-rbd
+  proxmox_storage: persistent-rbd
+  snapshot: __base__
