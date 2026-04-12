@@ -19,13 +19,13 @@ Each entry tells you **when to read the standard**. Do not pull every standard i
 
 - **[Architecture Standard](/opt/skyy-net/mdc-master-planning/standards/architecture/architectural_standard.md)** — the governing document. **Read before** any new component, phase, or cross-cutting change.
 - **[Stack Reference](/opt/skyy-net/mdc-master-planning/standards/architecture/stack_reference.md)** — **read when** referencing DAS or Harbor components or their current status.
-- **[Persistent Storage Standard](/opt/skyy-net/mdc-master-planning/standards/architecture/persistent_storage.md)** — **read when** touching anything that writes persistent state (Harbor storage, Ceph RBD artifact storage, build VM data).
 
 ### Development (read when doing that type of work)
 
 - **[DAS Standard](/opt/skyy-net/mdc-master-planning/standards/development/deploy-a-saurus/das_standard.md)** — **read when** writing or modifying any recipe, test criteria, or pipeline behavior in this repo. Defines recipe format, versioning, testing conventions, pipeline behavior, and artifact storage.
 - **[Ansible Standard](/opt/skyy-net/mdc-master-planning/standards/development/ansible/ansible_standard.md)** — **read when** referencing roles from recipes. Roles themselves live in `mdc-ansible-collections`.
 - **[Temporal Standard](/opt/skyy-net/mdc-master-planning/standards/development/temporal/temporal_standard.md)** — **read when** the recipe interacts with how Temporal workflows execute it (e.g., var passing, test invocation).
+- **[Persistent Storage Standard](/opt/skyy-net/mdc-master-planning/standards/development/persistent-storage/persistent_storage.md)** — **read when** touching anything that writes persistent state (Harbor storage, Ceph RBD artifact storage, build VM data).
 - **[SSH Key Management Standard](/opt/skyy-net/mdc-master-planning/standards/development/remote-access/ssh_key_management.md)** — **read when** recipes reference SSH keys or the build VM's SSH configuration.
 
 ### Documentation (read when writing docs)
