@@ -56,13 +56,19 @@ These are the placeholder credentials used during template building. They are **
     hostname: das-mint-workstation
     ```
 4. Reboot, login to desktop
-5. Install SSH server and disk utilities via terminal (Proxmox console or noVNC):
+5. Install SSH server, disk utilities, and QEMU guest agent via terminal (Proxmox console or noVNC):
    ```bash
    sudo apt update
-   sudo apt install -y openssh-server cloud-guest-utils
+   sudo apt install -y openssh-server cloud-guest-utils qemu-guest-agent
    sudo systemctl enable ssh
    sudo systemctl start ssh
+   sudo systemctl enable --now qemu-guest-agent
    ```
+   Then on the Proxmox host, enable the agent in the VM config (one-time per template):
+   ```bash
+   qm set <vmid> --agent 1
+   ```
+   This is a hard prerequisite for DAS Stage 1's `wait_for_build_vm_ssh` step, which asks Proxmox for the build VM's IPv4 via the guest agent API.
 6. Run full system update via Update Manager (GUI)
 7. Verify IP address is `192.168.200.101`: (if not check the mac reservation in the firewall)
    ```bash
