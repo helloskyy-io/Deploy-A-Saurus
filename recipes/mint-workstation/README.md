@@ -62,11 +62,16 @@ These are the placeholder credentials used during template building. They are **
    sudo apt install -y openssh-server cloud-guest-utils qemu-guest-agent
    sudo systemctl enable ssh
    sudo systemctl start ssh
-   sudo systemctl enable --now qemu-guest-agent
    ```
-   Then on the Proxmox host, enable the agent in the VM config (one-time per template):
+   On the Proxmox host, enable the agent in the VM config (one-time per template) — this adds the virtio-serial channel the agent uses:
    ```bash
    qm set <vmid> --agent 1
+   ```
+   Then reboot the VM. `qemu-guest-agent` on Ubuntu 24.04 / Mint 22.1 is a static service started by udev when the virtio-serial channel `/dev/virtio-ports/org.qemu.guest_agent.0` appears — do NOT `systemctl enable` it manually, that fails with "no installation config" because the unit has no `[Install]` section by design.
+
+   Verify from the Proxmox host after reboot:
+   ```bash
+   qm agent <vmid> ping      # empty output = agent responding
    ```
    This is a hard prerequisite for DAS Stage 1's `wait_for_build_vm_ssh` step, which asks Proxmox for the build VM's IPv4 via the guest agent API.
 6. Run full system update via Update Manager (GUI)
