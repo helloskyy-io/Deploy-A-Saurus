@@ -40,7 +40,7 @@ vm:
 # Ansible configuration (run after SSH is available on build VM)
 ansible:
   playbooks:
-    - skyy_net/common/playbooks/das_mint_workstation_base.yml
+    - das_mint_workstation_base.yml
   vars:
     target_user: das-template
 

@@ -2,6 +2,17 @@
 
 Operational notes for building and maintaining the Linux Mint workstation VM template.
 
+## Prerequisites
+
+These must be satisfied once per golden base template — not per build — before Stage 1 of the Temporal pipeline can run end-to-end against a fresh clone.
+
+- **qemu-guest-agent installed in the golden base template** (VMID 100002 at time of writing). Stage 1's `wait_for_build_vm_ssh` step asks Proxmox for the build VM's IPv4 address via the guest agent API; without it, the step times out and Stage 1 fails before Ansible can run.
+  - Inside the running template: `sudo apt install -y qemu-guest-agent && sudo systemctl enable --now qemu-guest-agent`.
+  - In Proxmox VM config for the template: set `agent: 1` (Options → QEMU Guest Agent → enabled).
+  - Verify from the Proxmox host: `qm agent <vmid> network-get-interfaces` returns an interfaces list (not an error).
+- **Config fields populated on Skyy-Command's `config.yaml`:** `proxmox.build_node` (e.g. `puma-server-005`) and `proxmox.golden_template_vmid` (e.g. `100002`). `template.config.yaml` documents both.
+- **External Ansible collection dependencies installed on the worker:** `community.general`, `community.crypto`, `ansible.posix`. The bootstrap worker Dockerfile installs these at build time; local dev installs via `ansible-galaxy collection install -r /opt/skyy-net/mdc-ansible-collections/meta/requirements.yml`.
+
 ## Base OS
 
 - **ISO:** Linux Mint 22.1 Cinnamon 64-bit
