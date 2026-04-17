@@ -19,7 +19,7 @@ Each entry tells you **when to read the standard**. Do not pull every standard i
 
 - **[Architecture Standard](/opt/skyy-net/mdc-master-planning/standards/architecture/architectural_standard.md)** — the governing document. **Read before** any new component, phase, or cross-cutting change.
 - **[Stack Reference](/opt/skyy-net/mdc-master-planning/standards/architecture/stack_reference.md)** — **read when** referencing DAS or Harbor components or their current status.
-- **[MDC Networking Standard](/opt/skyy-net/mdc-master-planning/standards/architecture/networking.md)** — **read when** editing a recipe's `vm.workload_tier` field or anything else that touches VLANs or VMID ranges. Recipes declare a customer-facing tier (currently `production`); internal tiers (`das_in_progress`, `golden_template`) are rejected by the validator. See Networking Standard §6 for the `workload_tier` field definition.
+- **[MDC Networking Standard](/opt/skyy-net/mdc-master-planning/standards/development/networking/networking_standard.md)** — **read when** editing a recipe's `vm.workload_tier` field or anything else that touches VLANs or VMID ranges. Recipes declare a customer-facing tier (currently `production`); internal tiers (`das_in_progress`, `golden_template`) are rejected by the validator. See Networking Standard §6 for the `workload_tier` field definition.
 
 ### Development (read when doing that type of work)
 
