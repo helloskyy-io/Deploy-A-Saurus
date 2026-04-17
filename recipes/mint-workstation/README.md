@@ -10,7 +10,7 @@ These must be satisfied once per golden base template — not per build — befo
   - Inside the running template: `sudo apt install -y qemu-guest-agent && sudo systemctl enable --now qemu-guest-agent`.
   - In Proxmox VM config for the template: set `agent: 1` (Options → QEMU Guest Agent → enabled).
   - Verify from the Proxmox host: `qm agent <vmid> network-get-interfaces` returns an interfaces list (not an error).
-- **Config fields populated on Skyy-Command's `config.yaml`:** `proxmox.build_node` (e.g. `puma-server-005`) and `proxmox.golden_template_vmid` (e.g. `100002`). `template.config.yaml` documents both.
+- **Config fields populated on Skyy-Command's `config.yaml`:** `proxmox.build_node` (e.g. `puma-server-005`). `templates/config.template` documents this. Golden template VMID is no longer tracked in `config.yaml` — it lives in `desired-state/vm/golden_templates/mint-workstation.yaml` per the MDC Networking Standard.
 - **External Ansible collection dependencies installed on the worker:** `community.general`, `community.crypto`, `ansible.posix`. The bootstrap worker Dockerfile installs these at build time; local dev installs via `ansible-galaxy collection install -r /opt/skyy-net/mdc-ansible-collections/meta/requirements.yml`.
 
 ## Base OS

@@ -33,9 +33,7 @@ vm:
   disk_size: 100G
   storage: persistent-rbd
   os_type: l26
-  network:
-    bridge: vmbr0
-    vlan: 200
+  workload_tier: production
 
 # Ansible configuration (run after SSH is available on build VM)
 ansible:
