@@ -7,6 +7,10 @@ name: mint-workstation
 description: "Linux Mint Cinnamon workstation with remote access via Sunshine"
 type: vm
 version: 0.1.0
+# DAS Template Standard §1 field declaration — grandfathered against the
+# standard pending full Workstation Profile backfill (sprint_1_loose_ends
+# 1-2.B6). Recipe continues shipping under Appendix B's grandfather note.
+template_class: workstation
 
 # Base OS (manual install — Mint does not support unattended install)
 base:
