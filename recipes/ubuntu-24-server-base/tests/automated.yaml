@@ -1,0 +1,66 @@
+---
+# Automated conformance tests for ubuntu-24-server-base
+# One-to-one translation of DAS Template Standard §A.6 Post-Boot Conformance Check.
+# Run by DAS Stage 2 via the conformance/platform-substrate-server/ Ansible role
+# in mdc-ansible-collections (follow-on dispatch — see README.md).
+#
+# Failure of any assertion surfaces as a Stage 2 ActivityResult error with
+# error_code set to the test `name` (Template Standard §6.3).
+
+tests:
+  - name: "qemu_guest_agent_active"
+    type: command
+    command: "systemctl is-active qemu-guest-agent"
+    expect_exit_code: 0
+    expect_stdout: "active"
+
+  - name: "tailscaled_unit_disabled"
+    type: command
+    command: "systemctl is-enabled tailscaled"
+    expect_exit_code: 0
+    expect_stdout: "disabled"
+
+  - name: "swap_off"
+    type: command
+    command: "swapon --show"
+    expect_exit_code: 0
+    expect_stdout: ""
+
+  - name: "kernel_module_br_netfilter_loaded"
+    type: command
+    command: "lsmod | grep br_netfilter"
+    expect_exit_code: 0
+
+  - name: "kernel_module_overlay_loaded"
+    type: command
+    command: "lsmod | grep overlay"
+    expect_exit_code: 0
+
+  - name: "sysctl_bridge_nf_call_iptables"
+    type: command
+    command: "sysctl -n net.bridge.bridge-nf-call-iptables"
+    expect_exit_code: 0
+    expect_stdout: "1"
+
+  - name: "sysctl_ip_forward"
+    type: command
+    command: "sysctl -n net.ipv4.ip_forward"
+    expect_exit_code: 0
+    expect_stdout: "1"
+
+  - name: "root_ssh_via_ansible_key"
+    type: command
+    command: "ssh -i <ansible-key> root@<dhcp-ip> 'echo ok'"
+    expect_exit_code: 0
+    expect_stdout: "ok"
+
+  - name: "cloud_init_nocloud_datasource_active"
+    type: command
+    command: "cloud-init query availability_zone"
+    expect_exit_code: 0
+
+  - name: "no_operator_accounts_leaked"
+    type: command
+    command: "getent passwd | grep -v '^(root\\|nobody\\|_\\|systemd-\\|messagebus\\|daemon\\|bin\\|sys\\|mail\\|www-data\\|sshd\\|tss\\|uuidd\\|proxy\\|syslog\\|landscape\\|pollinate\\|tcpdump\\|ubuntu-advantage)' | wc -l"
+    expect_exit_code: 0
+    expect_stdout: "0"
