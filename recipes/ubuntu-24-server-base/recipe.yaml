@@ -1,0 +1,66 @@
+---
+# Deploy-A-Saurus Recipe: Ubuntu 24 Server Base
+# Platform-substrate template for K3s cluster nodes (Clusters 1 + 2).
+# Produced per DAS Template Standard Appendix A (platform-substrate-server).
+# See README.md for consumer and build-step context.
+
+name: ubuntu-24-server-base
+description: >-
+  Minimal Ubuntu 24.04 LTS substrate for K3s cluster nodes (platform
+  installs orchestration post-clone).
+type: vm
+version: 1.0.0
+template_class: platform-substrate-server  # binding per Template Standard §1
+
+# Base image: canonical Ubuntu 24.04 LTS cloud image per §5.1.
+# Checksum pinned for reproducible rebuilds; refresh on point-release or
+# security rebuild per §5.2. Captured 2026-04-23 from
+# cloud-images.ubuntu.com/noble/current/SHA256SUMS.
+# NOTE: /current/ is a rolling pointer — when Canonical publishes a
+# patched image, this pinned checksum will no longer match the
+# downloaded file and Stage 1's fetch will fail. That failure is the
+# intended drift-detection signal per §5.2; refresh the pin here, bump
+# the recipe version, and rebuild.
+base:
+  os: "Ubuntu"
+  version: "24.04"
+  install_method: cloud-image
+  source_url: >-
+    https://cloud-images.ubuntu.com/noble/current/noble-server-cloudimg-amd64.img
+  source_checksum: >-
+    sha256:6e7016f2c9f4d3c00f48789eb6b9043ba2172ccc1b6b1eaf3ed1e29dd3e52bb3
+
+# VM hardware specs (used by DAS Stage 1/2 to build + test; platform sets
+# clone-time sizing per consumer spec). disk_size is the 10G floor from
+# §A.5 — the platform grows at clone; recipe MUST NOT pre-grow.
+vm:
+  cores: 2
+  memory: 4096
+  cpu: host
+  bios: ovmf
+  machine: i440fx
+  scsi_controller: virtio-scsi-single
+  disk_size: 10G
+  storage: persistent-rbd
+  os_type: l26
+  # Only validator-accepted value today; fit is imperfect for
+  # platform-substrate templates (see PR body for the open question).
+  workload_tier: production
+
+# Ansible configuration. The recipe only names the playbook — its body
+# lives in mdc-ansible-collections and implements §A.9's 10 build steps.
+# The playbook resolves the platform ansible key from the canonical
+# location declared in the SSH Key Management Standard (via
+# ANSIBLE_SSH_KEY_PATH env var, default /root/.ssh/ansible). The recipe
+# does not bake a path into ansible.vars — that would duplicate
+# deployment config that belongs in skyy-command/config.yaml.
+ansible:
+  playbooks:
+    - das_ubuntu_24_server_base.yml
+
+# Artifact storage (DAS Stage 3 writes the RBD image + __base__ snapshot).
+artifact:
+  type: ceph-rbd
+  ceph_pool: ssd-pool-rbd
+  proxmox_storage: persistent-rbd
+  snapshot: __base__
