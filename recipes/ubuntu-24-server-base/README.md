@@ -4,15 +4,15 @@
 
 A minimal Ubuntu 24.04 LTS substrate for VMs that will have platform orchestration (K3s + Calico + Tailscale) installed post-clone via Ansible. The template is deliberately **not** self-contained — it is the floor the platform builds on. See DAS Template Standard Appendix A for the binding class definition.
 
-Consumer: `ClusterProvisionWorkflow` in `skyy-command`. Once v1.0.0 of this template is baked and registered in `<desired-state>/common/das-versions.yaml`, operators flip `golden_template_vmid` in `templates/desired_state_templates/infra/clusters/k3s-1.yaml` and `k3s-2.yaml` from the current non-conformant 202002 template to this one (DAS Template Standard §A.8).
+Consumer, artifact location, and current-version swap path: see Template Standard §A.7–A.8.
 
 ## Build Steps
 
-The 10 canonical build steps (cloud image → conformant template) are defined in [DAS Template Standard §A.9](/opt/skyy-net/mdc-master-planning/standards/development/deploy-a-saurus/template_standard.md). This recipe is declarative; the build steps themselves live in the Ansible playbook `das_ubuntu_24_server_base.yml` in `mdc-ansible-collections/skyy_net/common/playbooks/`. That playbook is a **follow-on dispatch** — it is not authored in this PR.
+The 10 canonical build steps (cloud image → conformant template) are defined in DAS Template Standard §A.9. This recipe is declarative; the build steps themselves live in the Ansible playbook `das_ubuntu_24_server_base.yml` in `mdc-ansible-collections/skyy_net/common/playbooks/`. That playbook is a **follow-on dispatch** — it is not authored in this PR.
 
 ## Conformance
 
-Stage 2 runs the 10 machine-checkable assertions from [DAS Template Standard §A.6](/opt/skyy-net/mdc-master-planning/standards/development/deploy-a-saurus/template_standard.md) against the test clone. The assertion list is translated 1:1 into `tests/automated.yaml` in this directory.
+Stage 2 runs the 10 machine-checkable assertions from DAS Template Standard §A.6 against the test clone. The assertion list is translated 1:1 into `tests/automated.yaml` in this directory.
 
 The executing harness is an Ansible role at `mdc-ansible-collections/conformance/platform-substrate-server/` — also a **follow-on dispatch**, not in this PR.
 
@@ -20,9 +20,7 @@ Failure mode per Template Standard §6.3: any assertion failure surfaces as a St
 
 ## Base Image Provenance
 
-- Source: `https://cloud-images.ubuntu.com/noble/current/noble-server-cloudimg-amd64.img`
-- Checksum: captured 2026-04-23 from `https://cloud-images.ubuntu.com/noble/current/SHA256SUMS`
-- Refresh trigger: Ubuntu publishes a new 24.04.x point release, a High/Critical CVE against the image, or the 90-day quarterly floor (Template Standard §5.2)
+Source URL and pinned checksum live in `recipe.yaml` under `base:` (single source of truth). Refresh trigger: Template Standard §5.2.
 
 ## Template Credentials
 

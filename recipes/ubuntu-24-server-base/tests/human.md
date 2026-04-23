@@ -13,6 +13,17 @@ After Ansible has run against the build VM:
 - [ ] `journalctl -b -p err` shows no unexpected errors from cloud-init or systemd
 - [ ] Disk usage is reasonable for a minimal substrate (`df -h /` — expect well under 10G used)
 
+### §A.2 hard requirements not covered by §A.6 automation
+
+These are Template Standard §A.2 class-specific MUSTs that §A.6 does not assert.
+Until §A.6 is extended (upstream standard gap), verify manually:
+
+- [ ] `curl --version` returns 0 (§A.2 "curl installed")
+- [ ] `grep -c '^[^#]*requiretty' /etc/sudoers /etc/sudoers.d/* 2>/dev/null` returns
+      0 (§A.2 "sudoers allows root without TTY")
+- [ ] `grep -rhE '^\s*addresses:' /etc/netplan/` returns nothing (§A.2 "single NIC
+      DHCP only — no static config in /etc/netplan/*.yaml")
+
 ## Stage 2: Image Test
 
 After baking (qm template + rbd snapshot + clone to fresh VM):

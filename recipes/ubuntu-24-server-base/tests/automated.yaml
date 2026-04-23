@@ -1,6 +1,6 @@
 ---
 # Automated conformance tests for ubuntu-24-server-base
-# One-to-one translation of DAS Template Standard §A.6 Post-Boot Conformance Check.
+# One-to-one translation of Template Standard §A.6 Post-Boot Check.
 # Run by DAS Stage 2 via the conformance/platform-substrate-server/ Ansible role
 # in mdc-ansible-collections (follow-on dispatch — see README.md).
 #
@@ -8,6 +8,7 @@
 # error_code set to the test `name` (Template Standard §6.3).
 
 tests:
+  # --- service state ---
   - name: "qemu_guest_agent_active"
     type: command
     command: "systemctl is-active qemu-guest-agent"
@@ -17,9 +18,13 @@ tests:
   - name: "tailscaled_unit_disabled"
     type: command
     command: "systemctl is-enabled tailscaled"
-    expect_exit_code: 0
+    # `systemctl is-enabled <disabled-unit>` exits 1 and prints "disabled".
+    # Both the exit code AND stdout must match to confirm the unit is installed
+    # (so lookup succeeds) AND disabled (exit 1, not 4 for not-found).
+    expect_exit_code: 1
     expect_stdout: "disabled"
 
+  # --- kernel / networking readiness for K3s + Calico ---
   - name: "swap_off"
     type: command
     command: "swapon --show"
@@ -48,6 +53,9 @@ tests:
     expect_exit_code: 0
     expect_stdout: "1"
 
+  # --- identity / access ---
+  # `<ansible-key>` and `<dhcp-ip>` are harness-substituted at run time from
+  # the Stage 2 clone inventory (platform ansible key path, clone DHCP IP).
   - name: "root_ssh_via_ansible_key"
     type: command
     command: "ssh -i <ansible-key> root@<dhcp-ip> 'echo ok'"
@@ -61,6 +69,10 @@ tests:
 
   - name: "no_operator_accounts_leaked"
     type: command
+    # Single-regex atomic grep from §A.6; kept verbatim so the §A.6 check
+    # is a 1:1 mapping. The regex cannot be line-split without breaking
+    # semantics, so yamllint line-length is disabled for the next line.
+    # yamllint disable-line rule:line-length
     command: "getent passwd | grep -v '^(root\\|nobody\\|_\\|systemd-\\|messagebus\\|daemon\\|bin\\|sys\\|mail\\|www-data\\|sshd\\|tss\\|uuidd\\|proxy\\|syslog\\|landscape\\|pollinate\\|tcpdump\\|ubuntu-advantage)' | wc -l"
     expect_exit_code: 0
     expect_stdout: "0"
