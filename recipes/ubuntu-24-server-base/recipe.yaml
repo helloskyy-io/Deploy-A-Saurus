@@ -38,7 +38,7 @@ vm:
   memory: 4096
   cpu: host
   bios: ovmf
-  machine: i440fx
+  machine: q35  # Proxmox API rejects bare "i440fx" (must be "pc" / "q35" / versioned). q35 is modern PCIe + recommended for UEFI (bios: ovmf above).
   scsi_controller: virtio-scsi-single
   disk_size: 10G
   storage: persistent-rbd
