@@ -72,13 +72,16 @@ tests:
     expect_exit_code: 0
 
   # --- identity / access ---
-  # `<ansible-key>` and `<dhcp-ip>` are harness-substituted at run time from
-  # the Stage 2 clone inventory (platform ansible key path, clone DHCP IP).
-  - name: "root_ssh_via_ansible_key"
+  # Verifies §A.9.3's outcome: a valid SSH public key (ed25519/rsa/ecdsa)
+  # is present in /root/.ssh/authorized_keys. The runner SSHes in as
+  # root, so reading the file directly works; recursive self-SSH with a
+  # private key is unnecessary (and was previously broken because the
+  # placeholder pattern `<ansible-key>` / `<dhcp-ip>` is not implemented
+  # by the test harness — bash parses `<ansible-key>` as a redirect).
+  - name: "root_authorized_keys_has_ssh_pubkey"
     type: command
-    command: "ssh -i <ansible-key> root@<dhcp-ip> 'echo ok'"
+    command: "grep -qE '^(ssh-ed25519|ssh-rsa|ecdsa-sha2-) ' /root/.ssh/authorized_keys"
     expect_exit_code: 0
-    expect_stdout: "ok"
 
   - name: "sudoers_no_requiretty"
     type: command
