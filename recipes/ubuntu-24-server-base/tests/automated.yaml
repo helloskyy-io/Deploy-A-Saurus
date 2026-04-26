@@ -20,9 +20,19 @@ tests:
 
   - name: "qemu_guest_agent_enabled"
     type: command
-    command: "systemctl is-enabled qemu-guest-agent"
+    # Accept both `enabled` and `static`: `enabled` = traditional
+    # multi-user.target.wants symlink; `static` = unit starts via
+    # `BindsTo=dev-virtio\x2dports-org.qemu.guest_agent.0.device`
+    # (modern systemd pattern, which Ubuntu 24.04 noble's
+    # qemu-guest-agent ships as). The virtio guest-agent device is
+    # always present in Proxmox VMs with `agent: 1`, so a `static` unit
+    # WILL activate at boot — same semantic as `enabled` for the §A.6
+    # intent ("unit starts automatically"). The Stage 2 conformance
+    # role enforces this list strictly; this recipe-side test runs
+    # under the legacy run_automated_tests harness which currently
+    # only enforces rc=0 (separate cleanup item).
+    command: "systemctl is-enabled qemu-guest-agent | grep -E '^(enabled|static)$'"
     expect_exit_code: 0
-    expect_stdout: "enabled"
 
   - name: "tailscaled_unit_disabled"
     type: command
