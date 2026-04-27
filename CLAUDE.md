@@ -24,14 +24,14 @@ Each entry tells you **when to read the standard**. Do not pull every standard i
 ### Development (read when doing that type of work)
 
 - **[DAS Standard](/opt/skyy-net/mdc-master-planning/standards/development/deploy-a-saurus/das_standard.md)** — **read when** writing or modifying any recipe, test criteria, or pipeline behavior in this repo. Defines recipe format, versioning, testing conventions, pipeline behavior, and artifact storage.
+- **[DAS Template Standard](/opt/skyy-net/mdc-master-planning/standards/development/deploy-a-saurus/template_standard.md)** — **read when** authoring or modifying a template recipe (workstation, platform-substrate-server, future classes), adding a new template class, or changing recipe schema fields that the validator enforces. Defines the class taxonomy, universal requirements (cloud-init + growpart, qemu-guest-agent, DHCP-only, no operator users, version-of-record binding), cloud-init contract (NoCloud-only datasource), sourcing + rebuild cadence (canonical cloud images, 90-day floor), and the conformance test contract Stage 2 runs against the test clone.
 - **[Ansible Standard](/opt/skyy-net/mdc-master-planning/standards/development/ansible/ansible_standard.md)** — **read when** referencing roles from recipes. Roles themselves live in `mdc-ansible-collections`.
-- **[Temporal Standard](/opt/skyy-net/mdc-master-planning/standards/development/temporal/temporal_standard.md)** — **read when** the recipe interacts with how Temporal workflows execute it (e.g., var passing, test invocation).
-- **[Persistent Storage Standard](/opt/skyy-net/mdc-master-planning/standards/development/persistent-storage/persistent_storage.md)** — **read when** touching anything that writes persistent state (Harbor storage, Ceph RBD artifact storage, build VM data).
-- **[SSH Key Management Standard](/opt/skyy-net/mdc-master-planning/standards/development/remote-access/ssh_key_management.md)** — **read when** recipes reference SSH keys or the build VM's SSH configuration.
 
 ### Documentation (read when writing docs)
 
-- **[Dev Docs Standard](/opt/skyy-net/mdc-master-planning/development/dev_docs_standard.md)** — **read when** creating or revising roadmap docs, phase docs, or any document under `development/` in mdc-master-planning.
+- **[Documentation Standard](/opt/skyy-net/mdc-master-planning/standards/documentation/documentation_standard.md)** — **read when** creating or revising any planning doc in mdc-master-planning, or when the recipe-authoring conventions need cross-referencing. Covers sprint sub-item format, loose-ends convention, CLAUDE.md governance.
+
+> **Note:** Temporal Standard, Persistent Storage Standard, and SSH Key Management Standard are NOT listed here per the [CLAUDE.md governance rule](/opt/skyy-net/mdc-master-planning/standards/documentation/documentation_standard.md). This repo contains recipe YAML only — no Temporal workflow code (lives in `skyy-command`), no Helm chart code that defines storage (lives in `skyy-command/deployments/` and consuming-service repos), no Python that manages SSH keys. Workflows that EXECUTE recipes are governed by `skyy-command`'s CLAUDE.md.
 
 ## Planning Docs (in mdc-master-planning)
 
