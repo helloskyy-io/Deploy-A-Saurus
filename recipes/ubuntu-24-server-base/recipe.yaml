@@ -1,0 +1,94 @@
+---
+# Deploy-A-Saurus Recipe: Ubuntu 24 Server Base
+# Platform-substrate template for K3s cluster nodes (Clusters 1 + 2).
+# Produced per DAS Template Standard Appendix A (platform-substrate-server).
+# See README.md for consumer and build-step context.
+
+name: ubuntu-24-server-base
+description: >-
+  Minimal Ubuntu 24.04 LTS substrate for K3s cluster nodes (platform
+  installs orchestration post-clone).
+type: vm
+version: 1.0.0
+template_class: platform-substrate-server  # binding per Template Standard §1
+
+# Base image: Ubuntu 24.04 LTS cloud image per §5.1, with qemu-guest-agent
+# pre-installed by the operator on each build host (TEMPORARY — see below).
+#
+# Checksum pinned for reproducible rebuilds; refresh on point-release or
+# security rebuild per §5.2. Captured 2026-04-25 after pre-customization.
+#
+# NOTE — DRIFT DETECTION: /current/ is a rolling pointer. When Canonical
+# publishes a patched image, this pinned checksum will no longer match
+# either the canonical download OR the operator-customized cached file.
+# That failure is the intended drift-detection signal per §5.2; the
+# operator refreshes by repeating the pre-customize step (see below),
+# bumping the pin here, and rebuilding.
+#
+# NOTE — PRE-CUSTOMIZED IMAGE (TEMPORARY, until sprint 1-2f lands full
+# automation): the canonical Ubuntu cloud image does NOT ship with
+# qemu-guest-agent installed, but Stage 1's wait_for_build_vm_ssh
+# requires it for IPv4 discovery. Until cloud-init user-data injection
+# via cicustom snippets is wired up, each DAS-eligible build host must
+# carry an operator-customized copy of this image. Operator workflow on
+# each refresh:
+#
+#   ssh root@<build-host>
+#   apt install -y libguestfs-tools     # one-time per host
+#   curl -L -o /var/lib/mdc/deploy-a-saurus/cloud-images/noble-server-cloudimg-amd64.img \
+#       https://cloud-images.ubuntu.com/noble/current/noble-server-cloudimg-amd64.img
+#   virt-customize -a /var/lib/mdc/deploy-a-saurus/cloud-images/noble-server-cloudimg-amd64.img \
+#       --install qemu-guest-agent --run-command 'systemctl enable qemu-guest-agent'
+#   sha256sum /var/lib/mdc/deploy-a-saurus/cloud-images/noble-server-cloudimg-amd64.img
+#
+# The resulting sha256 goes into source_checksum below; source_url stays
+# pointed at the canonical upstream so the provenance is documented and
+# fetch_cloud_image's cache-miss path produces a CLOUD_IMAGE_CHECKSUM_MISMATCH
+# (the right surfaced failure — operator knows to re-customize on that host).
+#
+# Full-automation follow-on: sprint 1-2f — install qemu-guest-agent via
+# cloud-init cicustom snippets, drop the manual virt-customize step,
+# revert source_checksum to the canonical Ubuntu sha256.
+base:
+  os: "Ubuntu"
+  version: "24.04"
+  install_method: cloud-image
+  source_url: >-
+    https://cloud-images.ubuntu.com/noble/current/noble-server-cloudimg-amd64.img
+  source_checksum: >-
+    sha256:7ad48acb7384941d1a1f3729ee6f98bc03e2de78a32c9d6e228ad49c02b4f26b
+
+# VM hardware specs (used by DAS Stage 1/2 to build + test; platform sets
+# clone-time sizing per consumer spec). disk_size is the 10G floor from
+# §A.5 — the platform grows at clone; recipe MUST NOT pre-grow.
+vm:
+  cores: 2
+  memory: 4096
+  cpu: host
+  bios: ovmf
+  machine: q35  # Proxmox API rejects bare "i440fx" (must be "pc" / "q35" / versioned). q35 is modern PCIe + recommended for UEFI (bios: ovmf above).
+  scsi_controller: virtio-scsi-single
+  disk_size: 10G
+  storage: persistent-rbd
+  os_type: l26
+  # Only validator-accepted value today; fit is imperfect for
+  # platform-substrate templates (see PR body for the open question).
+  workload_tier: production
+
+# Ansible configuration. The recipe only names the playbook — its body
+# lives in mdc-ansible-collections and implements §A.9's 10 build steps.
+# The playbook resolves the platform ansible key from the canonical
+# location declared in the SSH Key Management Standard (via
+# ANSIBLE_SSH_KEY_PATH env var, default /root/.ssh/ansible). The recipe
+# does not bake a path into ansible.vars — that would duplicate
+# deployment config that belongs in skyy-command/config.yaml.
+ansible:
+  playbooks:
+    - das_ubuntu_24_server_base.yml
+
+# Artifact storage (DAS Stage 3 writes the RBD image + __base__ snapshot).
+artifact:
+  type: ceph-rbd
+  ceph_pool: ssd-pool-rbd
+  proxmox_storage: persistent-rbd
+  snapshot: __base__

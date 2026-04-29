@@ -1,0 +1,45 @@
+---
+# Automated test criteria for mint-workstation
+# Run after Stage 1 (config test) and Stage 2 (image test)
+# All tests must pass before human testing is offered
+
+tests:
+  - name: "VM boots and SSH responds"
+    type: port_check
+    port: 22
+    timeout_seconds: 120
+
+  - name: "Tailscale installed"
+    type: command
+    command: "tailscale version"
+    expect_exit_code: 0
+
+  - name: "Sunshine service enabled"
+    type: command
+    command: "systemctl is-enabled sunshine"
+    expect_exit_code: 0
+
+  - name: "UFW active"
+    type: command
+    command: "sudo ufw status | grep -q 'Status: active'"
+    expect_exit_code: 0
+
+  - name: "SSH allowed through firewall"
+    type: command
+    command: "sudo ufw status | grep -q OpenSSH"
+    expect_exit_code: 0
+
+  - name: "jq installed"
+    type: command
+    command: "which jq"
+    expect_exit_code: 0
+
+  - name: "Network utilities installed"
+    type: command
+    command: "which traceroute"
+    expect_exit_code: 0
+
+  - name: "Template user exists"
+    type: command
+    command: "id das-template"
+    expect_exit_code: 0
