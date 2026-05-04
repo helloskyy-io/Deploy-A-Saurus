@@ -29,8 +29,26 @@ Only changed recipes trigger builds. Each stage gates the next.
 
 | Recipe | Type | Description | Status |
 |---|---|---|---|
-| `mint-workstation` | VM (qcow2) | Linux Mint workstation for US-based remote access | Phase 0 |
+| `mint-workstation` | VM (qcow2) | Linux Mint workstation for US-based remote access | Phase 1 published (v0.1.0) |
+| `ubuntu-24-server-base` | VM (qcow2) | Platform-substrate Ubuntu 24 server base | Phase 1 published (v1.0.0) |
 | `kasm-browser` | Container (Docker) | Browser-only Kasm container for lightweight access | Phase 0 |
+
+## Running Phase 1 Workflows
+
+VM pipeline (Phase 1, Sprint 1-2a/1-2c) is run from the Skyy-Command host via three trigger scripts. Each stage gates the next; run them in sequence:
+
+```bash
+# Stage 1 — Build VM, Ansible, automated tests
+sudo /opt/skyy-net/skyy-command/lib/temporal/scripts/das_vm_stage1_start.sh <recipe-name>
+
+# Stage 2 — Convert to template, RBD clone test, automated tests
+sudo /opt/skyy-net/skyy-command/lib/temporal/scripts/das_vm_stage2_start.sh <recipe-name>
+
+# Stage 3 — Commit version-of-record, purge old images, cleanup
+sudo /opt/skyy-net/skyy-command/lib/temporal/scripts/das_vm_stage3_start.sh <recipe-name>
+```
+
+Recipe name is the directory name under `recipes/` (e.g. `mint-workstation`). Stage 3 commits the published version to the desired-state repo's `common/das-versions.yaml` — git is the source of truth. Container pipeline (Phase 2, Sprint 2-5) lands when Harbor is operational.
 
 ## Creating a New Recipe
 
