@@ -6,7 +6,7 @@ A **thin recipe repo** — declarative build definitions for container images an
 
 ## Repo structure
 
-Canonical layout: `file_structure.txt`. Read this BEFORE referencing internal paths — the model frequently fabricates paths from training-data priors when not primed.
+Canonical layout: `docs/file_structure.txt`. Read this BEFORE referencing internal paths — the model frequently fabricates paths from training-data priors when not primed.
 
 ## What This Repo Does NOT Contain
 
