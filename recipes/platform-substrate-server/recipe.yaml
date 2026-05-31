@@ -1,0 +1,98 @@
+---
+# Deploy-A-Saurus Recipe: Platform-Substrate Server (K3s node substrate)
+#
+# Target repo: deploy-a-saurus/recipes/platform-substrate-server/recipe.yaml
+#
+# DERIVED template (DAS Template Standard §5.4 hierarchy). Clones the
+# published `ubuntu-24-server-base` universal base and applies ONLY the
+# K3s-prerequisite delta: br_netfilter/overlay kernel modules, K3s sysctls,
+# and the tailscaled binary (installed, NOT enabled). Everything else — the
+# §2 universals (cloud-init NoCloud, qemu-guest-agent, growpart, root +
+# ansible key, swap-off, hardening, no-operator-users) — is INHERITED from
+# the universal base, not re-run.
+#
+# This is the platform-substrate-server class extracted out of the old,
+# mis-named `ubuntu-24-server-base` (which conflated the universal base with
+# the K3s class). See DAS Template Standard §1 historical note + §5.4.
+#
+# Consumer: ClusterProvisionWorkflow (Cluster 1 + Cluster 2 K3s nodes); any
+# future workflow that provisions VMs that get K3s + Calico + Tailscale
+# installed post-clone. Per the Template Consumption Standard, the consumer
+# resolves this template's published VMID from
+# <desired-state>/vm/golden_templates/platform-substrate-server.yaml.
+
+name: platform-substrate-server
+description: >-
+  Ubuntu 24.04 LTS K3s-node substrate — derived from ubuntu-24-server-base
+  (universal base) + the K3s-prerequisite delta (br_netfilter/overlay,
+  K3s sysctls, tailscaled installed-not-enabled). Platform installs K3s +
+  Calico + Tailscale post-clone.
+type: vm
+version: 1.0.0
+template_class: platform-substrate-server  # binding per Template Standard §1 + Appendix A
+
+# DERIVED source (DAS Template Standard §5.1 / §5.4). The build clones the
+# published parent template instead of fetching a raw cloud image — no
+# source_url / source_checksum (the parent IS the source). The parent is
+# version-pinned per the §5.4 lineage contract: when ubuntu-24-server-base
+# publishes a new version, this pin MUST be bumped and this template rebuilt
+# (§5.2 rebuild trigger). Stage 1 resolves the parent's published VMID from
+# the parent's golden-template declaration (VMID authority per Consumption
+# Standard §1) and asserts the published version matches this pin.
+#
+# Pinned to @2.0.0 — the universal-base re-model is a breaking content change
+# (the base no longer carries K3s prereqs), so the re-modeled base publishes
+# at a NEW major version. The operator re-pins here if the rebuilt base lands
+# at a different version (rebuild sequence: parent before child).
+base:
+  os: "Ubuntu"
+  version: "24.04"
+  install_method: derive
+  derive_from: ubuntu-24-server-base@2.0.0
+
+# VM hardware specs for the derive BUILD/TEST VM. The clone inherits the
+# parent's disk (the universal base's 10G §A.5 floor); the platform grows at
+# clone per consumer spec. storage names the RBD pool used for the per-clone
+# cloud-init drive. Matches the universal base profile — a K3s substrate adds
+# no hardware over the base.
+vm:
+  cores: 2
+  memory: 4096
+  cpu: host
+  bios: ovmf
+  machine: q35  # modern PCIe + UEFI (bios: ovmf); inherited from the parent clone
+  scsi_controller: virtio-scsi-single
+  disk_size: 10G
+  storage: persistent-rbd
+  os_type: l26
+  # Only validator-accepted value today; fit is imperfect for
+  # platform-substrate templates (carried over from the base — same open
+  # question, see PR body).
+  workload_tier: production
+
+# Bake-time Ansible — the K3s-prerequisite delta ONLY. The body lives in
+# mdc-ansible-collections and implements §A.9's binding additions (kernel
+# modules, sysctls, tailscaled). The universal portion is inherited from the
+# cloned base, not re-applied. Resolves the platform ansible key from the
+# canonical location (ANSIBLE_SSH_KEY_PATH; default /root/.ssh/ansible) — the
+# recipe bakes no path.
+ansible:
+  playbooks:
+    - das_platform_substrate_server.yml
+
+# Stage 2 conformance: the EXECUTOR is the conformance role's
+# tasks/platform-substrate-server.yml (DAS Template Standard §6.2 + §A.6) —
+# the full §A.6 post-boot check. Per §6.4 (layered conformance), running the
+# child's class check against the derived artifact proves BOTH the §2
+# universals survived the delta AND the K3s delta is correct. The recipe-side
+# SPEC lives in tests/automated.yaml + tests/human.md, kept 1:1 with that task
+# (das_standard.md mandates both files for every recipe; §6.2 clarifies the
+# conformance role is the executor and does NOT remove the recipe-side
+# obligation).
+
+# Artifact storage (DAS Stage 3 writes the RBD image + __base__ snapshot).
+artifact:
+  type: ceph-rbd
+  ceph_pool: ssd-pool-rbd
+  proxmox_storage: persistent-rbd
+  snapshot: __base__

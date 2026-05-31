@@ -4,6 +4,10 @@ A **thin recipe repo** — declarative build definitions for container images an
 
 **All MDC platform standards live in `mdc-master-planning`.** This file references them by absolute path. Do not duplicate a standard here — always link to the canonical copy.
 
+## Repo structure
+
+Canonical layout: `docs/file_structure.txt`. Read this BEFORE referencing internal paths — the model frequently fabricates paths from training-data priors when not primed.
+
 ## What This Repo Does NOT Contain
 
 - **Ansible roles** — those live in `mdc-ansible-collections`

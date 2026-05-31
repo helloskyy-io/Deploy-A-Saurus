@@ -1,20 +1,20 @@
 ---
-# Automated conformance tests for ubuntu-24-server-base (UNIVERSAL BASE).
-# Covers the §2 Universal Requirements ONLY (DAS Template Standard §6.4 —
-# "base proves §2"). The K3s-delta assertions (tailscaled, br_netfilter,
-# overlay, K3s sysctls) moved to the derived platform-substrate-server recipe
-# when the base was stripped to universal-base (Phase 7).
-# Run by DAS Stage 2 via the conformance/universal-base.yml task in the
-# conformance Ansible role (mdc-ansible-collections).
+# Automated conformance tests for platform-substrate-server
+# One-to-one translation of Template Standard §A.6 Post-Boot Check (the full
+# platform-substrate check: §2 universals that survived the derive delta PLUS
+# the K3s delta itself — §6.4 layered conformance).
+# Run by DAS Stage 2 via the conformance/platform-substrate-server.yml task in
+# the conformance Ansible role (mdc-ansible-collections).
 #
 # Failure of any assertion surfaces as a Stage 2 ActivityResult error with
 # error_code set to the test `name` (Template Standard §6.3).
 
 tests:
-  # --- service state (§2.2) ---
+  # --- service state ---
   # qemu-guest-agent: running now AND will start on reboot (both matter;
   # is-active alone would pass a running-but-not-enabled unit that won't
-  # survive the next reboot).
+  # survive the next reboot). INHERITED from the universal base — §6.4
+  # proves it survived the delta.
   - name: "qemu_guest_agent_active"
     type: command
     command: "systemctl is-active qemu-guest-agent"
@@ -29,35 +29,68 @@ tests:
     # (modern systemd pattern, which Ubuntu 24.04 noble's
     # qemu-guest-agent ships as). The virtio guest-agent device is
     # always present in Proxmox VMs with `agent: 1`, so a `static` unit
-    # WILL activate at boot — same semantic as `enabled` for §2.2.
+    # WILL activate at boot — same semantic as `enabled` for the §A.6
+    # intent ("unit starts automatically").
     command: "systemctl is-enabled qemu-guest-agent | grep -E '^(enabled|static)$'"
     expect_exit_code: 0
 
-  # --- swap (§2 hardening — base disables swap so K3s/kubelet do not need to) ---
+  - name: "tailscaled_unit_disabled"
+    type: command
+    command: "systemctl is-enabled tailscaled"
+    # `systemctl is-enabled <disabled-unit>` exits 1 and prints "disabled".
+    # Both the exit code AND stdout must match to confirm the unit is installed
+    # (so lookup succeeds) AND disabled (exit 1, not 4 for not-found). This is
+    # part of the K3s delta (tailscaled binary installed-not-enabled).
+    expect_exit_code: 1
+    expect_stdout: "disabled"
+
+  # --- kernel / networking readiness for K3s + Calico (the delta) ---
   - name: "swap_off"
     type: command
     command: "swapon --show"
     expect_exit_code: 0
     expect_stdout: ""
 
-  # --- required tooling baseline ---
+  - name: "kernel_module_br_netfilter_loaded"
+    type: command
+    command: "lsmod | grep br_netfilter"
+    expect_exit_code: 0
+
+  - name: "kernel_module_overlay_loaded"
+    type: command
+    command: "lsmod | grep overlay"
+    expect_exit_code: 0
+
+  - name: "sysctl_bridge_nf_call_iptables"
+    type: command
+    command: "sysctl -n net.bridge.bridge-nf-call-iptables"
+    expect_exit_code: 0
+    expect_stdout: "1"
+
+  - name: "sysctl_ip_forward"
+    type: command
+    command: "sysctl -n net.ipv4.ip_forward"
+    expect_exit_code: 0
+    expect_stdout: "1"
+
+  # --- required tooling baseline (inherited from the universal base) ---
   - name: "curl_installed"
     type: command
-    # curl is a generic baseline tool kept in the universal base (used by
-    # every derived class's post-clone install). --version exits 0 only if
-    # the binary is installed and runnable; the version banner varies, so
-    # value is not asserted.
+    # curl is required because the K3s installer is `curl | sh` (§A.2).
+    # --version exits 0 only if the binary is installed and runnable; the
+    # version banner on stdout varies by build, so value is not asserted.
     command: "curl --version"
     expect_exit_code: 0
 
-  # --- identity / access (§2.4) ---
+  # --- identity / access (inherited from the universal base) ---
   # Name kept 1:1 with the conformance role's `root_ssh_via_ansible_key`
   # assertion (Template Standard §6.2 — the error_code mapping strips the
   # `Assert: ` prefix, so the spec name MUST match the role task name). The
   # conformance role proves this with a live control-node `ssh -i`; this
   # recipe-side spec uses the authorized_keys grep proxy because the
   # run_automated_tests harness SSHes in as root and can't easily do a
-  # control-node ssh -i. Same concept (root reachable via the ansible key).
+  # control-node ssh -i. Same concept (root reachable via the ansible key),
+  # asserted at the level each harness can.
   - name: "root_ssh_via_ansible_key"
     type: command
     command: "grep -qE '^(ssh-ed25519|ssh-rsa|ecdsa-sha2-) ' /root/.ssh/authorized_keys"
@@ -75,13 +108,13 @@ tests:
       /etc/sudoers /etc/sudoers.d/ 2>/dev/null'
     expect_exit_code: 0
 
-  # --- network configuration (§2.3 DHCP-only) ---
+  # --- network configuration (inherited from the universal base) ---
   - name: "netplan_no_static_config"
     type: command
-    # Template MUST be DHCP-only (§2.3). Static IPs configured in netplan
-    # bind the template to a single deployment. The `addresses:` key is how
-    # netplan declares static IP configuration; absence of that key across
-    # all netplan files proves no static config is baked in.
+    # Template MUST be DHCP-only (§2.3, §A.2). Static IPs configured in
+    # netplan bind the template to a single deployment. The `addresses:`
+    # key is how netplan declares static IP configuration; absence of that
+    # key across all netplan files proves no static config is baked in.
     command: >-
       bash -c '! grep -hE "^[[:space:]]*addresses:"
       /etc/netplan/*.yaml 2>/dev/null'
@@ -91,19 +124,17 @@ tests:
   - name: "cloud_init_nocloud_datasource_active"
     type: command
     # Verifies cloud-init is operational AND its active datasource is
-    # NoCloud (not EC2, GCE, Azure, OpenStack, or any other). `cloud-init
-    # status --long` emits the active datasource class in its output;
-    # grep -q checks for the DataSourceNoCloud class string specifically.
+    # NoCloud (not EC2, GCE, Azure, OpenStack, or any other). Inherited
+    # from the universal base; §6.4 proves the delta did not regress it.
     command: >-
       bash -c "cloud-init status --long | grep -q 'DataSourceNoCloud'"
     expect_exit_code: 0
 
-  # --- no operator accounts leaked from recipe (§2.4) ---
   - name: "no_operator_accounts_leaked"
     type: command
-    # Single-regex atomic grep; kept verbatim so the §A.6-style check is a
-    # 1:1 mapping with the conformance role. The regex cannot be line-split
-    # without breaking semantics, so yamllint line-length is disabled below.
+    # Single-regex atomic grep from §A.6; kept verbatim so the §A.6 check
+    # is a 1:1 mapping. Inherited from the universal base; §6.4 proves the
+    # delta did not add an operator account.
     # yamllint disable-line rule:line-length
     command: "getent passwd | grep -v '^(root\\|nobody\\|_\\|systemd-\\|messagebus\\|daemon\\|bin\\|sys\\|mail\\|www-data\\|sshd\\|tss\\|uuidd\\|proxy\\|syslog\\|landscape\\|pollinate\\|tcpdump\\|ubuntu-advantage)' | wc -l"
     expect_exit_code: 0

@@ -1,0 +1,73 @@
+---
+# Automated conformance tests for ubuntu-24-server-customer-workload.
+# One-to-one translation of Template Standard Appendix C §C.6 (customer-
+# workload-server class). Run by DAS Stage 2 via the
+# conformance/tasks/customer-workload-server.yml Ansible role task in
+# mdc-ansible-collections — this file is the recipe-side SPEC; that task is
+# the EXECUTOR. The two MUST stay 1:1 (das_standard.md + Template Standard
+# §6.2; drift is a standards violation).
+#
+# Failure of any assertion surfaces as a Stage 2 ActivityResult error with
+# error_code set to the test `name` (Template Standard §6.3).
+#
+# Scope is SOFTWARE-ONLY: the build/test host need not have a passed-through
+# GPU. The NVIDIA driver + CUDA toolkit + kernel modules are present and
+# reportable. The deploy-time HARDWARE check (a GPU answering on a passed-
+# through VM) is the consuming workflow's job — Flux Edge
+# DeployFluxEdgeNodeWorkflow step 1 + the flux_edge_install role's nvidia-smi
+# GPU-query — NOT this bake-time harness.
+
+tests:
+  # --- universal base (customer-workload-server carries the universal
+  #     cloud-init / guest-agent requirements; it is NOT platform-substrate) ---
+  - name: "qemu_guest_agent_active"
+    type: command
+    command: "systemctl is-active qemu-guest-agent"
+    expect_exit_code: 0
+    expect_stdout: "active"
+
+  # --- GPU software stack (software-only — §C.6) ---
+  - name: "nvidia_smi_present"
+    type: command
+    # `nvidia-smi --version` reports driver/library versions without requiring
+    # a GPU to answer — the software-only check. grep confirms the DRIVER
+    # version line is present.
+    command: "nvidia-smi --version | grep -q 'DRIVER version'"
+    expect_exit_code: 0
+
+  - name: "nvidia_driver_series_matches"
+    type: command
+    # The driver series the recipe bakes (570). Stays in sync with the recipe's
+    # nvidia_driver_series. Software-only — reads the installed driver version.
+    command: "nvidia-smi --version | grep -oE 'DRIVER version: [0-9]+' | grep -qE ': 570'"
+    expect_exit_code: 0
+
+  - name: "nvcc_present"
+    type: command
+    # `nvcc -V` confirms the CUDA toolkit (compiler) is installed.
+    command: "nvcc -V | grep -q release"
+    expect_exit_code: 0
+
+  - name: "nvidia_kernel_module_present"
+    type: command
+    # `modinfo nvidia` confirms the GPU kernel driver module is installed.
+    command: "modinfo nvidia"
+    expect_exit_code: 0
+
+  - name: "nvidia_uvm_kernel_module_present"
+    type: command
+    # `modinfo nvidia_uvm` confirms the CUDA Unified Virtual Memory module is
+    # installed (required for CUDA compute workloads).
+    command: "modinfo nvidia_uvm"
+    expect_exit_code: 0
+
+  # --- BINDING: no vendor agent baked into the template (NEVER-CLONE) ---
+  # The template MUST NOT contain FluxCore (nor any other per-machine-identity
+  # vendor agent) — it is installed live, per-VM, post-clone. Bake-time
+  # enforcement of the NEVER-CLONE-AFTER-FLUXCORE invariant. The `!` inverts
+  # grep: we require grep to find NOTHING (no matching unit files).
+  - name: "no_vendor_agent_unit_files"
+    type: command
+    command: >-
+      bash -c '! systemctl list-unit-files | grep -qE "fluxcore|synaptron|browser-session"'
+    expect_exit_code: 0
