@@ -1,0 +1,86 @@
+---
+# Deploy-A-Saurus Recipe: Ubuntu 24 Server — Customer Workload (GPU)
+#
+# Target repo: deploy-a-saurus/recipes/ubuntu-24-server-customer-workload/recipe.yaml
+#
+# FluxCore-FREE GPU node template for Flux Edge (and future customer GPU
+# workloads). Ubuntu 24.04 + NVIDIA driver 570 + CUDA 12-8 + qemu-guest-agent +
+# the platform ansible key. Produced per DAS Template Standard Appendix C
+# (customer-workload-server class).
+#
+# ⛔ NEVER-CLONE-AFTER-FLUXCORE: this template MUST NOT contain FluxCore (nor
+# any other per-machine-identity vendor agent). FluxCore is installed LIVE,
+# per-VM, post-clone by the flux_edge_install role. Appendix C §C.6's
+# `no_vendor_agent_unit_files` conformance check enforces this at bake time.
+
+name: ubuntu-24-server-customer-workload
+description: >-
+  Ubuntu 24.04 LTS GPU node substrate (NVIDIA 570 + CUDA 12-8) for customer
+  GPU workloads. FluxCore-free by design — the vendor agent is installed live
+  per-VM post-clone (NEVER-CLONE-AFTER-FLUXCORE).
+type: vm
+version: 1.0.0
+template_class: customer-workload-server  # binding per Template Standard §1 + Appendix C
+
+# Base image: same Ubuntu 24.04 LTS cloud image as ubuntu-24-server-base.
+# Checksum pinned for reproducible rebuilds (refresh on point-release/security
+# rebuild per §5.2 — this is the operator-pre-customized image carrying
+# qemu-guest-agent until cloud-init cicustom snippet automation lands; see the
+# ubuntu-24-server-base recipe NOTE for the virt-customize refresh workflow).
+#
+# ⚠️ DO NOT downgrade to 22.04. FluxCore's public docs recommend Ubuntu 22.04
+# and lag behind reality — Ubuntu 24.04 is CONFIRMED working with FluxCore by
+# the operator's prior FluxEdge-team experience (Puma, 2026-05-31). 24.04 is a
+# deliberate, validated choice, not an oversight. The CUDA keyring repo path
+# (ubuntu2204 in FluxCore's docs) is the only 22.04-pinned coordinate and is a
+# separate concern (NVIDIA repo availability), not the base OS.
+base:
+  os: "Ubuntu"
+  version: "24.04"
+  install_method: cloud-image
+  source_url: >-
+    https://cloud-images.ubuntu.com/noble/current/noble-server-cloudimg-amd64.img
+  source_checksum: >-
+    sha256:7ad48acb7384941d1a1f3729ee6f98bc03e2de78a32c9d6e228ad49c02b4f26b
+
+# VM hardware specs for the BUILD/TEST VM (platform sets clone-time sizing per
+# node spec). Larger than the base template: the CUDA toolkit + NVIDIA driver
+# add several GB, so the disk floor is raised from 10G to 40G. The GPU itself
+# is NOT attached at bake time — the driver/CUDA install is software-only; the
+# passed-through GPU is attached per-VM at clone time by the consuming workflow.
+vm:
+  cores: 4
+  memory: 8192
+  cpu: host
+  bios: ovmf
+  machine: q35
+  scsi_controller: virtio-scsi-single
+  disk_size: 40G
+  storage: persistent-rbd
+  os_type: l26
+  workload_tier: production
+
+# Bake-time Ansible. The body lives in mdc-ansible-collections and layers the
+# universal base profile + the NVIDIA 570 driver + CUDA 12-8 toolkit +
+# qemu-guest-agent. It installs NO FluxCore (NEVER-CLONE). The exact CUDA apt
+# coordinate (12-8) is confirmed against the live FluxCore install guide at
+# build time (phase doc Open decision #2).
+ansible:
+  playbooks:
+    - das_ubuntu_24_server_customer_workload.yml
+
+# Stage 2 conformance: the EXECUTOR is the conformance role's
+# tasks/customer-workload-server.yml (DAS Template Standard §6.2 +
+# Appendix C §C.6) — software-only GPU checks + the binding
+# no_vendor_agent_unit_files assertion. The recipe-side SPEC lives in
+# tests/automated.yaml + tests/human.md, kept 1:1 with that task
+# (das_standard.md mandates both files for every recipe; §6.2 clarifies
+# the conformance role is the executor and does NOT remove the recipe-side
+# obligation — PM3 ruling 2026-05-31, standards gap closed at 06ea381).
+
+# Artifact storage (DAS Stage 3 writes the RBD image + __base__ snapshot).
+artifact:
+  type: ceph-rbd
+  ceph_pool: ssd-pool-rbd
+  proxmox_storage: persistent-rbd
+  snapshot: __base__
