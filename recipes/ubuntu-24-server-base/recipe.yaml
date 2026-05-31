@@ -1,16 +1,27 @@
 ---
 # Deploy-A-Saurus Recipe: Ubuntu 24 Server Base
-# Platform-substrate template for K3s cluster nodes (Clusters 1 + 2).
-# Produced per DAS Template Standard Appendix A (platform-substrate-server).
-# See README.md for consumer and build-step context.
+# The UNIVERSAL BASE template (DAS Template Standard §1, §5.4). Satisfies ONLY
+# the §2 Universal Requirements — cloud-init + growpart, qemu-guest-agent, DHCP,
+# no-operator-users, root + ansible key, swap-off, base hardening, machine-id
+# reset. Carries ZERO class-specific content. It is the `derive` parent for
+# every server class (platform-substrate-server, customer-workload-server).
+#
+# Historical note (DAS Template Standard §1): this recipe previously conflated
+# the universal base with the platform-substrate-server class by baking K3s
+# prerequisites (br_netfilter/overlay, K3s sysctls, tailscaled). Phase 7 stripped
+# those into the derived `platform-substrate-server` recipe; what remains here is
+# the §2-only universal base. See README.md for consumer and build-step context.
 
 name: ubuntu-24-server-base
 description: >-
-  Minimal Ubuntu 24.04 LTS substrate for K3s cluster nodes (platform
-  installs orchestration post-clone).
+  Minimal Ubuntu 24.04 LTS universal base — the §2-only `derive` parent for
+  every server class. Carries no class-specific content.
 type: vm
-version: 1.0.0
-template_class: platform-substrate-server  # binding per Template Standard §1
+# 2.0.0 — MAJOR bump: stripping the K3s prerequisites is a breaking content
+# change. A consumer that cloned v1.0.0 expecting K3s prereqs would break on
+# v2.0.0, so the version forces a deliberate adopt (§2.6 + §5.2).
+version: 2.0.0
+template_class: universal-base  # binding per Template Standard §1
 
 # Base image: Ubuntu 24.04 LTS cloud image per §5.1, with qemu-guest-agent
 # pre-installed by the operator on each build host (TEMPORARY — see below).
@@ -60,7 +71,7 @@ base:
 
 # VM hardware specs (used by DAS Stage 1/2 to build + test; platform sets
 # clone-time sizing per consumer spec). disk_size is the 10G floor from
-# §A.5 — the platform grows at clone; recipe MUST NOT pre-grow.
+# §2.5 — the platform grows at clone; recipe MUST NOT pre-grow.
 vm:
   cores: 2
   memory: 4096
@@ -71,14 +82,15 @@ vm:
   disk_size: 10G
   storage: persistent-rbd
   os_type: l26
-  # Only validator-accepted value today; fit is imperfect for
-  # platform-substrate templates (see PR body for the open question).
+  # Only validator-accepted value today; fit is imperfect for a universal
+  # base template (see PR body for the open question).
   workload_tier: production
 
 # Ansible configuration. The recipe only names the playbook — its body
-# lives in mdc-ansible-collections and implements §A.9's 10 build steps.
-# The playbook resolves the platform ansible key from the canonical
-# location declared in the SSH Key Management Standard (via
+# lives in mdc-ansible-collections and implements the §2 universal build
+# steps ONLY (no K3s prereqs — those moved to the platform-substrate-server
+# delta playbook). The playbook resolves the platform ansible key from the
+# canonical location declared in the SSH Key Management Standard (via
 # ANSIBLE_SSH_KEY_PATH env var, default /root/.ssh/ansible). The recipe
 # does not bake a path into ansible.vars — that would duplicate
 # deployment config that belongs in skyy-command/config.yaml.
