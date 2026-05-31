@@ -83,10 +83,15 @@ tests:
     expect_exit_code: 0
 
   # --- identity / access (inherited from the universal base) ---
-  # Verifies §A.9.3's outcome: a valid SSH public key (ed25519/rsa/ecdsa)
-  # is present in /root/.ssh/authorized_keys. The runner SSHes in as
-  # root, so reading the file directly works.
-  - name: "root_authorized_keys_has_ssh_pubkey"
+  # Name kept 1:1 with the conformance role's `root_ssh_via_ansible_key`
+  # assertion (Template Standard §6.2 — the error_code mapping strips the
+  # `Assert: ` prefix, so the spec name MUST match the role task name). The
+  # conformance role proves this with a live control-node `ssh -i`; this
+  # recipe-side spec uses the authorized_keys grep proxy because the
+  # run_automated_tests harness SSHes in as root and can't easily do a
+  # control-node ssh -i. Same concept (root reachable via the ansible key),
+  # asserted at the level each harness can.
+  - name: "root_ssh_via_ansible_key"
     type: command
     command: "grep -qE '^(ssh-ed25519|ssh-rsa|ecdsa-sha2-) ' /root/.ssh/authorized_keys"
     expect_exit_code: 0
