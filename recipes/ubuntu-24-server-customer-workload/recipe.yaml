@@ -40,8 +40,12 @@ base:
   install_method: cloud-image
   source_url: >-
     https://cloud-images.ubuntu.com/noble/current/noble-server-cloudimg-amd64.img
+  # Refreshed 2026-05-31: Ubuntu rolled the noble "current" image; verified the
+  # new checksum against the official cloud-images.ubuntu.com/noble/current/
+  # SHA256SUMS (matches the downloaded image — not a corrupt/MITM artifact).
+  # The "current" URL is a moving target; expect periodic refresh per §5.2.
   source_checksum: >-
-    sha256:7ad48acb7384941d1a1f3729ee6f98bc03e2de78a32c9d6e228ad49c02b4f26b
+    sha256:53fdde898feed8b027d94baa9cfe8229867f330a1d9c49dc7d84465ee7f229f7
 
 # VM hardware specs for the BUILD/TEST VM (platform sets clone-time sizing per
 # node spec). Larger than the base template: the CUDA toolkit + NVIDIA driver
