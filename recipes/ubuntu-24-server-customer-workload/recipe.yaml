@@ -1,96 +1,154 @@
 ---
-# Deploy-A-Saurus Recipe: Ubuntu 24 Server — Customer Workload (GPU)
+# Deploy-A-Saurus Recipe: Ubuntu 24 Server — Customer Workload (GPU-less base)
 #
 # Target repo: deploy-a-saurus/recipes/ubuntu-24-server-customer-workload/recipe.yaml
 #
-# FluxCore-FREE GPU node template for Flux Edge (and future customer GPU
-# workloads). Ubuntu 24.04 + NVIDIA driver 570 + CUDA 12-8 + qemu-guest-agent +
-# the platform ansible key. Produced per DAS Template Standard Appendix C
-# (customer-workload-server class).
+# GPU-LESS Linux base for GPU-bearing customer-workload VMs (Flux Edge, future
+# Synaptron-on-VM, customer-browser-on-VM). Class: customer-workload-server
+# (DAS Template Standard §1 + Appendix C, two-stage rewrite 7852a70 2026-06-06).
 #
-# ⛔ NEVER-CLONE-AFTER-FLUXCORE: this template MUST NOT contain FluxCore (nor
-# any other per-machine-identity vendor agent). FluxCore is installed LIVE,
-# per-VM, post-clone by the flux_edge_install role. Appendix C §C.6's
-# `no_vendor_agent_unit_files` conformance check enforces this at bake time.
+# TWO-STAGE MODEL (DAS Standard Two-Stage Model; DAS Template §C.4.1/§C.8):
+#   Stage 1 (BAKED, this template):  the GPU-less base — §2 universals + the
+#     class base requirements (root SSH + ansible key + qemu-guest-agent +
+#     swap-off + DHCP + cloud-init NoCloud). NO NVIDIA driver, NO CUDA, NO
+#     container-toolkit — those are NOT baked (§C.3 MUST-NOT).
+#   Stage 2 (BUILT AT DEPLOY, per-VM):  the NVIDIA driver (install_nvidia_driver)
+#     + the CUDA toolkit (a separate role — see the runtime: contract), installed
+#     into the running clone at deploy, exact-pinned from the VM's own
+#     desired-state file (settings.nvidia_driver / settings.cuda).
+#
+# NOTE (binding) — NEVER-CLONE-AFTER-INSTALL: this template MUST NOT contain a
+# vendor agent (FluxCore, Synaptron client, customer-browser session manager) —
+# they write per-machine identity at install time and install LIVE, per-VM,
+# post-clone by their consuming workflow. Appendix C §C.6's
+# no_vendor_agent_unit_files conformance check enforces this at bake time.
 
 name: ubuntu-24-server-customer-workload
 description: >-
-  Ubuntu 24.04 LTS GPU node substrate (NVIDIA 570 + CUDA 12-8) for customer
-  GPU workloads. FluxCore-free by design — the vendor agent is installed live
-  per-VM post-clone (NEVER-CLONE-AFTER-FLUXCORE).
+  Ubuntu 24.04 LTS GPU-less base for customer GPU workloads — a clean derive
+  from ubuntu-24-server-base (universal base). The NVIDIA driver + CUDA are NOT
+  baked; they are built into the running clone at deploy, exact-pinned per-VM
+  from desired state (settings.nvidia_driver). One generic base serves Flux
+  Edge, Synaptron, and every GPU workload (per-VM pins live in the per-VM file).
 type: vm
-version: 1.0.0
+# 2.0.0 — MAJOR bump: stripping the baked GPU stack (NVIDIA 570 + CUDA 12-8) and
+# re-modeling cloud-image → derive is a breaking content change. A consumer that
+# cloned v1.0.0 expecting a GPU-baked template gets a GPU-less base on v2.0.0, so
+# the version forces a deliberate adopt (§2.6 + §5.2). Mirrors the universal-base
+# 1.0.0→2.0.0 bump for the analogous K3s strip.
+version: 2.0.0
 template_class: customer-workload-server  # binding per Template Standard §1 + Appendix C
 
-# Base image: same Ubuntu 24.04 LTS cloud image as ubuntu-24-server-base.
-# Checksum pinned for reproducible rebuilds (refresh on point-release/security
-# rebuild per §5.2 — this is the operator-pre-customized image carrying
-# qemu-guest-agent until cloud-init cicustom snippet automation lands; see the
-# ubuntu-24-server-base recipe NOTE for the virt-customize refresh workflow).
+# DERIVED source (DAS Template Standard §5.1 / §5.4 / §C.8 — GPU-less base +
+# deploy-time GPU build). The build clones the published parent template instead
+# of fetching a raw cloud image — no source_url / source_checksum (the parent IS
+# the source; the recipe validator rejects them on a derive recipe). The parent
+# is version-pinned per the §5.4 lineage contract: when ubuntu-24-server-base
+# publishes a new version, this pin MUST be bumped and this template rebuilt
+# (§5.2 rebuild trigger). Stage 1 resolves the parent's published VMID from the
+# parent's golden-template declaration and asserts the published version matches
+# this pin (fails loud with DERIVE_PARENT_VERSION_MISMATCH otherwise).
 #
-# ⚠️ DO NOT downgrade to 22.04. FluxCore's public docs recommend Ubuntu 22.04
-# and lag behind reality — Ubuntu 24.04 is CONFIRMED working with FluxCore by
-# the operator's prior FluxEdge-team experience (Puma, 2026-05-31). 24.04 is a
-# deliberate, validated choice, not an oversight. The CUDA keyring repo path
-# (ubuntu2204 in FluxCore's docs) is the only 22.04-pinned coordinate and is a
-# separate concern (NVIDIA repo availability), not the base OS.
+# Pinned to @2.0.0 — the universal-base re-model (K3s strip) is a breaking
+# content change, so the re-modeled base publishes at a NEW major version. The
+# operator re-pins here if the rebuilt base lands at a different version (rebuild
+# sequence: parent before child). Matches the platform-substrate-server pin.
 base:
   os: "Ubuntu"
   version: "24.04"
-  install_method: cloud-image
-  source_url: >-
-    https://cloud-images.ubuntu.com/noble/current/noble-server-cloudimg-amd64.img
-  # IMPORTANT: this is the checksum of the OPERATOR-PRE-CUSTOMIZED image
-  # (raw noble + virt-customize --install qemu-guest-agent), NOT the raw
-  # upstream sha256 — see the ubuntu-24-server-base recipe NOTE for the
-  # refresh procedure. The canonical image ships no qemu-guest-agent, but
-  # Stage 1 wait_for_build_vm_ssh requires it for IPv4 discovery (until
-  # sprint 1-2f wires cloud-init cicustom injection).
-  #
-  # STALE as of 2026-05-31: Ubuntu rolled the noble "current" image (raw is now
-  # 53fdde8…); the build hosts' pre-customized cache must be refreshed
-  # (re-virt-customize the new raw image) and THIS pin bumped to that
-  # customized image's sha256. Until then Stage 1 fails CHECKSUM_MISMATCH on a
-  # cache-miss host (the intended "re-customize" signal). Do NOT pin the raw
-  # upstream checksum — that lets a no-guest-agent image through and Stage 1
-  # then times out at wait_for_build_vm_ssh.
-  source_checksum: >-
-    sha256:7ad48acb7384941d1a1f3729ee6f98bc03e2de78a32c9d6e228ad49c02b4f26b
+  install_method: derive
+  derive_from: ubuntu-24-server-base@2.0.0
 
-# VM hardware specs for the BUILD/TEST VM (platform sets clone-time sizing per
-# node spec). Larger than the base template: the CUDA toolkit + NVIDIA driver
-# add several GB, so the disk floor is raised from 10G to 40G. The GPU itself
-# is NOT attached at bake time — the driver/CUDA install is software-only; the
-# passed-through GPU is attached per-VM at clone time by the consuming workflow.
+# VM hardware specs for the derive BUILD/TEST VM. The clone inherits the parent's
+# disk (the universal base's 10G §A.5 floor); the GPU stack is NO LONGER baked,
+# so this base does NOT carry the ~5–8GB CUDA footprint at bake (§C.5 rewrite) —
+# it matches the base profile. The DEPLOYED GPU host sizes for the deploy-time
+# GPU stack + vendor-agent runtime via the per-VM settings.hardware.disk_gb
+# (~40GB — VM Management §2 / §C.5), applied at clone so cloud-init growpart
+# auto-grows BEFORE the deploy-time GPU install runs. The recipe MUST NOT
+# pre-grow. A customer-workload base adds no bake-time hardware over the base —
+# same profile as platform-substrate-server.
 vm:
-  cores: 4
-  memory: 8192
+  cores: 2
+  memory: 4096
   cpu: host
   bios: ovmf
-  machine: q35
+  machine: q35  # modern PCIe + UEFI (bios: ovmf); inherited from the parent clone
   scsi_controller: virtio-scsi-single
-  disk_size: 40G
+  disk_size: 10G
   storage: persistent-rbd
   os_type: l26
+  # Only validator-accepted value today; fit is imperfect for a customer-workload
+  # base template (carried over from the base — same open question, see PR body).
   workload_tier: production
 
-# Bake-time Ansible. The body lives in mdc-ansible-collections and layers the
-# universal base profile + the NVIDIA 570 driver + CUDA 12-8 toolkit +
-# qemu-guest-agent. It installs NO FluxCore (NEVER-CLONE). The exact CUDA apt
-# coordinate (12-8) is confirmed against the live FluxCore install guide at
-# build time (phase doc Open decision #2).
+# Bake-time Ansible — the GPU-LESS base delta ONLY. The body lives in
+# mdc-ansible-collections and applies the §C.8 base delta (delete default user,
+# root SSH, ansible key, qemu-guest-agent + curl, swap-off, cloud-init NoCloud,
+# DHCP, generalize-before-template). It bakes NO GPU stack (no NVIDIA driver, no
+# CUDA, no container-toolkit — §C.3 / §C.8 build-step MUST-NOT) and NO vendor
+# agent (NEVER-CLONE). The §2 universals are inherited from the cloned base, not
+# re-applied. Resolves the platform ansible key from the canonical location
+# (ANSIBLE_SSH_KEY_PATH; default /root/.ssh/ansible) — the recipe bakes no path.
+# (The playbook's matching GPU-strip is a BLOCKING companion in
+# mdc-ansible-collections — see the README "Companion changes" section + PR body.)
 ansible:
   playbooks:
     - das_ubuntu_24_server_customer_workload.yml
 
+# Deploy-time build (Stage 2 — the GPU delta, NOT baked). Applied to the running
+# clone at deploy by the reconcile=deploy workflow (DAS Template §C.8; Phase 10
+# producer / Django Phase 7 consumer), NOT at bake time.
+#
+# PRODUCER/CONSUMER CONTRACT (binding — DAS Standard Two-Stage Model; §C.4.1).
+# The recipe declares the MECHANISM (which roles run + which var NAMES they
+# need); the VALUES come from the per-VM desired-state file (VM Management §2),
+# its single source of truth. The full table (post_deploy_var → settings.* field
+# → the Ansible extra_var the executor passes to the role) lives in README.md
+# "Deploy-time build — producer/consumer contract". The essentials the consumer
+# (Django Phase 7) MUST wire:
+#   - nvidia_driver ← settings.nvidia_driver (EXACT pinned build, e.g.
+#     "570.158.01"; NEVER the bare series) → install_nvidia_driver consumes it as
+#     the extra_var `nvidia_driver_version` (the role asserts it is defined and
+#     carries NO pin of its own — defaults/main.yml). install_nvidia_driver is
+#     DRIVER-ONLY (its meta) and pins the exact build per §C.4.1 (NVIDIA CUDA repo
+#     → nvidia-driver-<series> + apt pin 1001 + apt-mark hold; NEVER the floating
+#     -server metapackage). The pin source is settings.nvidia_driver, NOT a recipe
+#     constant (criterion #5). Verified post-deploy (§C.6.1; LCM Phase 3
+#     verify_host_driver) against the built clone.
+#   - cuda ← settings.cuda (e.g. "12-8", when settings.gpu: true) → consumed by a
+#     SEPARATE CUDA-toolkit deploy-time role. install_nvidia_driver does NOT
+#     install CUDA. NOTE (prerequisite, surfaced — NOT this PR): a CUDA-toolkit
+#     role that provides `nvcc` is NOT yet present in mdc-ansible-collections
+#     (install_nvidia_toolkit is the NVIDIA *container* toolkit for Docker, not
+#     CUDA). §C.8 names "install_nvidia_driver installs driver + CUDA" — that is
+#     imprecise vs the driver-only role; flagged for the architecture/PM3 session.
+#     `cuda` declares the §C.8/§C.6.1 desired-state contract now; its install role
+#     + registration here is a BLOCKING prerequisite for the post-deploy GPU
+#     contract (the nvcc_present assertion) to go live. See README + PR body.
+#   - UNTRUSTED-INPUT VALIDATION (consumer obligation, documented here): both
+#     values flow from desired state into Ansible extra_vars; the executor MUST
+#     format-validate them as untrusted input before the install runs
+#     (settings.nvidia_driver ~ ^[0-9]+\.[0-9]+\.[0-9]+$; settings.cuda ~
+#     ^[0-9]+-[0-9]+$ — not arbitrary text). Implemented consumer-side, not here.
+runtime:
+  post_deploy_roles:
+    - skyy_net.common.install_nvidia_driver   # driver only (FQCN, generic, idempotent); CUDA-toolkit role TBD (see contract)
+  post_deploy_vars:
+    - nvidia_driver                           # value: settings.nvidia_driver → role extra_var nvidia_driver_version
+    - cuda                                    # value: settings.cuda → CUDA-toolkit role (TBD; see contract)
+
 # Stage 2 conformance: the EXECUTOR is the conformance role's
-# tasks/customer-workload-server.yml (DAS Template Standard §6.2 +
-# Appendix C §C.6) — software-only GPU checks + the binding
-# no_vendor_agent_unit_files assertion. The recipe-side SPEC lives in
-# tests/automated.yaml + tests/human.md, kept 1:1 with that task
-# (das_standard.md mandates both files for every recipe; §6.2 clarifies
+# tasks/customer-workload-server.yml (DAS Template Standard §6.2 + Appendix C
+# §C.6) — the GPU-less base check (§2 universals + base requirements + the binding
+# no_vendor_agent_unit_files assertion; NO GPU assertion at bake per §C.6.1). The
+# recipe-side SPEC lives in tests/automated.yaml + tests/human.md, kept 1:1 with
+# that task (das_standard.md mandates both files for every recipe; §6.2 clarifies
 # the conformance role is the executor and does NOT remove the recipe-side
-# obligation — PM3 ruling 2026-05-31, standards gap closed at 06ea381).
+# obligation). The GPU-stack assertions carry requires_post_deploy: true so the
+# bake gate skips them; they run against the built clone post-deploy (§C.6.1).
+# (The conformance-role relocate is a BLOCKING companion in mdc-ansible-collections
+# — it currently asserts GPU at bake AND lacks the full §2 block; see README + PR body.)
 
 # Artifact storage (DAS Stage 3 writes the RBD image + __base__ snapshot).
 artifact:
