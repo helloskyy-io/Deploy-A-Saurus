@@ -1,73 +1,185 @@
 ---
-# Automated conformance tests for ubuntu-24-server-customer-workload.
-# One-to-one translation of Template Standard Appendix C §C.6 (customer-
-# workload-server class). Run by DAS Stage 2 via the
+# Automated conformance tests for ubuntu-24-server-customer-workload (GPU-LESS base).
+# One-to-one translation of Template Standard Appendix C §C.6 / §C.6.1 (customer-
+# workload-server class, two-stage rewrite 7852a70). Run by DAS Stage 2 via the
 # conformance/tasks/customer-workload-server.yml Ansible role task in
-# mdc-ansible-collections — this file is the recipe-side SPEC; that task is
-# the EXECUTOR. The two MUST stay 1:1 (das_standard.md + Template Standard
-# §6.2; drift is a standards violation).
+# mdc-ansible-collections — this file is the recipe-side SPEC; that task is the
+# EXECUTOR. The two MUST stay 1:1 (das_standard.md + Template Standard §6.2;
+# drift is a standards violation).
+#
+# TWO-STAGE TEST SPLIT (§C.6.1):
+#   - BAKE-time (no flag): the GPU-less base proves the §2 universals + the class
+#     base requirements ONLY. There is NO GPU stack baked, so NO GPU assertion
+#     runs at bake. §6.4 layered conformance: running this child check against the
+#     derived artifact proves the §2 universals survived the derive delta.
+#   - POST-DEPLOY (requires_post_deploy: true): the GPU-stack assertions are
+#     SKIPPED by the Stage-2 bake gate (the GPU-less base has nothing GPU to
+#     assert) and run against the DEPLOYED/BUILT clone — the reconcile workflow's
+#     verify step (LCM Phase 3 verify_host_driver), after install_nvidia_driver
+#     has built the exact-pinned driver from the per-VM settings.nvidia_driver.
 #
 # Failure of any assertion surfaces as a Stage 2 ActivityResult error with
 # error_code set to the test `name` (Template Standard §6.3).
-#
-# Scope is SOFTWARE-ONLY: the build/test host need not have a passed-through
-# GPU. The NVIDIA driver + CUDA toolkit + kernel modules are present and
-# reportable. The deploy-time HARDWARE check (a GPU answering on a passed-
-# through VM) is the consuming workflow's job — Flux Edge
-# DeployFluxEdgeNodeWorkflow step 1 + the flux_edge_install role's nvidia-smi
-# GPU-query — NOT this bake-time harness.
 
 tests:
-  # --- universal base (customer-workload-server carries the universal
-  #     cloud-init / guest-agent requirements; it is NOT platform-substrate) ---
+  # =========================================================================
+  # BAKE-TIME — the GPU-less base: §2 universals + class base requirements.
+  # No GPU assertion here (§C.6.1) — the driver/CUDA are built at deploy, not
+  # baked. Mirrors the universal-base / platform-substrate-server §2 block
+  # (minus the K3s-delta assertions, which are NOT customer-workload concerns).
+  # =========================================================================
+
+  # --- service state (§2.2) ---
+  # qemu-guest-agent: running now AND will start on reboot (both matter;
+  # is-active alone would pass a running-but-not-enabled unit that won't
+  # survive the next reboot). Inherited from the universal base — §6.4 proves
+  # it survived the derive delta.
   - name: "qemu_guest_agent_active"
     type: command
     command: "systemctl is-active qemu-guest-agent"
     expect_exit_code: 0
     expect_stdout: "active"
 
-  # --- GPU software stack (software-only — §C.6) ---
-  - name: "nvidia_smi_present"
+  - name: "qemu_guest_agent_enabled"
     type: command
-    # `nvidia-smi --version` reports driver/library versions without requiring
-    # a GPU to answer — the software-only check. grep confirms the DRIVER
-    # version line is present.
-    command: "nvidia-smi --version | grep -q 'DRIVER version'"
+    # Accept both `enabled` and `static`: `enabled` = traditional
+    # multi-user.target.wants symlink; `static` = unit starts via
+    # `BindsTo=dev-virtio\x2dports-org.qemu.guest_agent.0.device`
+    # (modern systemd pattern, which Ubuntu 24.04 noble's qemu-guest-agent
+    # ships as). The virtio guest-agent device is always present in Proxmox
+    # VMs with `agent: 1`, so a `static` unit WILL activate at boot.
+    command: "systemctl is-enabled qemu-guest-agent | grep -E '^(enabled|static)$'"
     expect_exit_code: 0
 
-  - name: "nvidia_driver_series_matches"
+  # --- swap (§2 hardening — CUDA/GPU workloads should never page) ---
+  - name: "swap_off"
     type: command
-    # The driver series the recipe bakes (570). Stays in sync with the recipe's
-    # nvidia_driver_series. Software-only — reads the installed driver version.
-    command: "nvidia-smi --version | grep -oE 'DRIVER version: [0-9]+' | grep -qE ': 570'"
+    command: "swapon --show"
+    expect_exit_code: 0
+    expect_stdout: ""
+
+  # --- required tooling baseline (inherited from the universal base) ---
+  - name: "curl_installed"
+    type: command
+    # curl is a generic baseline tool kept in the universal base (used by the
+    # deploy-time installs). --version exits 0 only if the binary is installed
+    # and runnable; the version banner varies, so value is not asserted.
+    command: "curl --version"
     expect_exit_code: 0
 
-  - name: "nvcc_present"
+  # --- identity / access (§2.4 / §C.2) ---
+  # Name kept 1:1 with the conformance role's `root_ssh_via_ansible_key`
+  # assertion (Template Standard §6.2 — the error_code mapping strips the
+  # `Assert: ` prefix, so the spec name MUST match the role task name). The
+  # conformance role proves this with a live control-node `ssh -i`; this
+  # recipe-side spec uses the authorized_keys grep proxy because the
+  # run_automated_tests harness SSHes in as root and can't easily do a
+  # control-node ssh -i. Same concept (root reachable via the ansible key).
+  - name: "root_ssh_via_ansible_key"
     type: command
-    # `nvcc -V` confirms the CUDA toolkit (compiler) is installed.
-    command: "nvcc -V | grep -q release"
+    command: "grep -qE '^(ssh-ed25519|ssh-rsa|ecdsa-sha2-) ' /root/.ssh/authorized_keys"
     expect_exit_code: 0
 
-  - name: "nvidia_kernel_module_present"
+  - name: "sudoers_no_requiretty"
     type: command
-    # `modinfo nvidia` confirms the GPU kernel driver module is installed.
-    command: "modinfo nvidia"
+    # `Defaults requiretty` in sudoers forces sudo to require a TTY, which
+    # breaks Ansible's non-TTY SSH + become flow. The leading `!` inverts
+    # grep's exit: we want grep to find NOTHING (exit 1 → `!` makes bash
+    # exit 0). Ubuntu 24.04 cloud image default does not set this; the
+    # assertion protects against a recipe step accidentally adding it.
+    command: >-
+      bash -c '! grep -rE "^[[:space:]]*Defaults[[:space:]]+.*requiretty"
+      /etc/sudoers /etc/sudoers.d/ 2>/dev/null'
     expect_exit_code: 0
 
-  - name: "nvidia_uvm_kernel_module_present"
+  # --- network configuration (§2.3 DHCP-only) ---
+  - name: "netplan_no_static_config"
     type: command
-    # `modinfo nvidia_uvm` confirms the CUDA Unified Virtual Memory module is
-    # installed (required for CUDA compute workloads).
-    command: "modinfo nvidia_uvm"
+    # Template MUST be DHCP-only (§2.3 / §C.2). Static IPs configured in netplan
+    # bind the template to a single deployment. The `addresses:` key is how
+    # netplan declares static IP configuration; absence of that key across all
+    # netplan files proves no static config is baked in.
+    command: >-
+      bash -c '! grep -hE "^[[:space:]]*addresses:"
+      /etc/netplan/*.yaml 2>/dev/null'
     expect_exit_code: 0
+
+  # --- cloud-init datasource (NoCloud specifically per §4.1) ---
+  - name: "cloud_init_nocloud_datasource_active"
+    type: command
+    # Verifies cloud-init is operational AND its active datasource is NoCloud
+    # (not EC2, GCE, Azure, OpenStack, or any other). Inherited from the
+    # universal base; §6.4 proves the delta did not regress it.
+    command: >-
+      bash -c "cloud-init status --long | grep -q 'DataSourceNoCloud'"
+    expect_exit_code: 0
+
+  # --- no operator accounts leaked from recipe (§2.4 / §C.3) ---
+  - name: "no_operator_accounts_leaked"
+    type: command
+    # Single-regex atomic grep; kept verbatim so the §C.6 check is a 1:1 mapping
+    # with the conformance role. The regex cannot be line-split without breaking
+    # semantics, so yamllint line-length is disabled below.
+    # yamllint disable-line rule:line-length
+    command: "getent passwd | grep -v '^(root\\|nobody\\|_\\|systemd-\\|messagebus\\|daemon\\|bin\\|sys\\|mail\\|www-data\\|sshd\\|tss\\|uuidd\\|proxy\\|syslog\\|landscape\\|pollinate\\|tcpdump\\|ubuntu-advantage)' | wc -l"
+    expect_exit_code: 0
+    expect_stdout: "0"
 
   # --- BINDING: no vendor agent baked into the template (NEVER-CLONE) ---
   # The template MUST NOT contain FluxCore (nor any other per-machine-identity
   # vendor agent) — it is installed live, per-VM, post-clone. Bake-time
-  # enforcement of the NEVER-CLONE-AFTER-FLUXCORE invariant. The `!` inverts
-  # grep: we require grep to find NOTHING (no matching unit files).
+  # enforcement of the NEVER-CLONE-AFTER-INSTALL invariant (§C.3 / §C.6.1). The
+  # `!` inverts grep: we require grep to find NOTHING (no matching unit files).
   - name: "no_vendor_agent_unit_files"
     type: command
     command: >-
       bash -c '! systemctl list-unit-files | grep -qE "fluxcore|synaptron|browser-session"'
     expect_exit_code: 0
+
+  # =========================================================================
+  # POST-DEPLOY — the GPU software stack (§C.6.1). requires_post_deploy: true
+  # makes the Stage-2 BAKE gate SKIP these (the GPU-less base has no GPU stack
+  # to assert); they run against the DEPLOYED/BUILT clone after the deploy-time
+  # install_nvidia_driver role has built the exact-pinned driver + CUDA. The
+  # exact-build VALUE match (vs the per-VM settings.nvidia_driver pin) is the
+  # reconciler's verify_host_driver job (it holds the per-VM target); these
+  # recipe-side assertions prove the GPU stack is present + exact-build-
+  # reportable + the kernel modules are loaded on the real (passed-through) GPU.
+  # =========================================================================
+
+  - name: "nvidia_smi_exact_build_reported"
+    type: command
+    # §C.6.1 form: `--query-gpu=driver_version` reads the EXACT installed build
+    # (e.g. 570.158.01) on the passed-through GPU — exit 0 proves the driver is
+    # loaded AND a GPU answers. NOTE the deliberate change from the old
+    # software-only `nvidia-smi --version | grep 'DRIVER version'` bake check and
+    # the hardcoded-`570`-series match: post-deploy the driver runs on a real
+    # GPU, and the exact build is per-VM (settings.nvidia_driver) — a recipe-side
+    # series constant would (a) be a recipe constant the standard forbids
+    # (criterion #5) and (b) pass a floated 570.211.01. The exact-value check vs
+    # the pin is verify_host_driver's job (LCM Phase 3).
+    command: "nvidia-smi --query-gpu=driver_version --format=csv,noheader"
+    expect_exit_code: 0
+    requires_post_deploy: true
+
+  - name: "nvcc_present"
+    type: command
+    # `nvcc -V` confirms the CUDA toolkit (compiler) is installed on the clone.
+    command: "nvcc -V | grep -q release"
+    expect_exit_code: 0
+    requires_post_deploy: true
+
+  - name: "nvidia_kernel_module_present"
+    type: command
+    # `modinfo nvidia` confirms the GPU kernel driver module is installed.
+    command: "modinfo nvidia | grep -q '^version:'"
+    expect_exit_code: 0
+    requires_post_deploy: true
+
+  - name: "nvidia_uvm_kernel_module_present"
+    type: command
+    # `modinfo nvidia_uvm` confirms the CUDA Unified Virtual Memory module is
+    # installed (required for CUDA compute workloads).
+    command: "modinfo nvidia_uvm | grep -q '^version:'"
+    expect_exit_code: 0
+    requires_post_deploy: true
