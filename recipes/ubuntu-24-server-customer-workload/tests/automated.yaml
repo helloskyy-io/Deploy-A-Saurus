@@ -22,12 +22,10 @@
 # error_code set to the test `name` (Template Standard §6.3).
 
 tests:
-  # =========================================================================
-  # BAKE-TIME — the GPU-less base: §2 universals + class base requirements.
+  # --- BAKE-TIME: the GPU-less base — §2 universals + class base requirements ---
   # No GPU assertion here (§C.6.1) — the driver/CUDA are built at deploy, not
   # baked. Mirrors the universal-base / platform-substrate-server §2 block
   # (minus the K3s-delta assertions, which are NOT customer-workload concerns).
-  # =========================================================================
 
   # --- service state (§2.2) ---
   # qemu-guest-agent: running now AND will start on reboot (both matter;
@@ -136,16 +134,24 @@ tests:
       bash -c '! systemctl list-unit-files | grep -qE "fluxcore|synaptron|browser-session"'
     expect_exit_code: 0
 
-  # =========================================================================
-  # POST-DEPLOY — the GPU software stack (§C.6.1). requires_post_deploy: true
-  # makes the Stage-2 BAKE gate SKIP these (the GPU-less base has no GPU stack
-  # to assert); they run against the DEPLOYED/BUILT clone after the deploy-time
-  # install_nvidia_driver role has built the exact-pinned driver + CUDA. The
+  # --- POST-DEPLOY: the GPU software stack (§C.6.1) ---
+  # requires_post_deploy: true makes the Stage-2 BAKE gate SKIP these (the
+  # GPU-less base has no GPU stack to assert — run_automated_tests records them
+  # skipped, reason: requires_post_deploy); they run against the DEPLOYED/BUILT
+  # clone in the reconcile verify step (the consumer's leg, Django Phase 7),
+  # after the deploy-time roles have built the exact-pinned driver + CUDA. The
   # exact-build VALUE match (vs the per-VM settings.nvidia_driver pin) is the
   # reconciler's verify_host_driver job (it holds the per-VM target); these
   # recipe-side assertions prove the GPU stack is present + exact-build-
   # reportable + the kernel modules are loaded on the real (passed-through) GPU.
-  # =========================================================================
+  #
+  # PREREQUISITE (surfaced — NOT this PR): nvcc_present asserts the §C.6.1 CUDA
+  # contract, which a CUDA-toolkit deploy-time role must satisfy. No such role
+  # exists yet in mdc-ansible-collections (install_nvidia_toolkit is the NVIDIA
+  # *container* toolkit, not CUDA); install_nvidia_driver is driver-only. So
+  # nvcc_present is a FORWARD declaration of the spec'd post-deploy contract — it
+  # goes live once a CUDA-toolkit role is authored + registered in runtime.
+  # post_deploy_roles. See the recipe runtime: contract + the PR body.
 
   - name: "nvidia_smi_exact_build_reported"
     type: command

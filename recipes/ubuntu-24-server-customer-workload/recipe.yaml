@@ -12,15 +12,16 @@
 #     class base requirements (root SSH + ansible key + qemu-guest-agent +
 #     swap-off + DHCP + cloud-init NoCloud). NO NVIDIA driver, NO CUDA, NO
 #     container-toolkit — those are NOT baked (§C.3 MUST-NOT).
-#   Stage 2 (BUILT AT DEPLOY, per-VM):  the NVIDIA driver + CUDA, installed into
-#     the running clone by the install_nvidia_driver post_deploy_role (below),
-#     exact-pinned from the VM's own desired-state file (settings.nvidia_driver).
+#   Stage 2 (BUILT AT DEPLOY, per-VM):  the NVIDIA driver (install_nvidia_driver)
+#     + the CUDA toolkit (a separate role — see the runtime: contract), installed
+#     into the running clone at deploy, exact-pinned from the VM's own
+#     desired-state file (settings.nvidia_driver / settings.cuda).
 #
-# ⛔ NEVER-CLONE-AFTER-INSTALL: this template MUST NOT contain a vendor agent
-# (FluxCore, Synaptron client, customer-browser session manager) — they write
-# per-machine identity at install time and install LIVE, per-VM, post-clone by
-# their consuming workflow. Appendix C §C.6's no_vendor_agent_unit_files
-# conformance check enforces this at bake time.
+# NOTE (binding) — NEVER-CLONE-AFTER-INSTALL: this template MUST NOT contain a
+# vendor agent (FluxCore, Synaptron client, customer-browser session manager) —
+# they write per-machine identity at install time and install LIVE, per-VM,
+# post-clone by their consuming workflow. Appendix C §C.6's
+# no_vendor_agent_unit_files conformance check enforces this at bake time.
 
 name: ubuntu-24-server-customer-workload
 description: >-
@@ -89,11 +90,8 @@ vm:
 # agent (NEVER-CLONE). The §2 universals are inherited from the cloned base, not
 # re-applied. Resolves the platform ansible key from the canonical location
 # (ANSIBLE_SSH_KEY_PATH; default /root/.ssh/ansible) — the recipe bakes no path.
-#
-# COMPANION (mdc-ansible-collections, NOT this PR): das_ubuntu_24_server_customer_workload.yml
-# must be re-modeled GPU-less (strip the NVIDIA 570 / CUDA 12-8 bake tasks) so the
-# baked artifact matches this recipe's GPU-less intent. The recipe leads; the
-# playbook follows (same pattern as recipe-follows-standard). See PR body.
+# (The playbook's matching GPU-strip is a BLOCKING companion in
+# mdc-ansible-collections — see the README "Companion changes" section + PR body.)
 ansible:
   playbooks:
     - das_ubuntu_24_server_customer_workload.yml
@@ -102,47 +100,43 @@ ansible:
 # clone at deploy by the reconcile=deploy workflow (DAS Template §C.8; Phase 10
 # producer / Django Phase 7 consumer), NOT at bake time.
 #
-# PRODUCER/CONSUMER CONTRACT (binding — DAS Standard Two-Stage Model; §C.4.1):
-#   - This recipe declares the MECHANISM: which role runs (post_deploy_roles) and
-#     which variable NAMES it consumes (post_deploy_vars). The recipe carries the
-#     names; it does NOT carry the values.
-#   - The VALUES come from the per-VM desired-state file (VM Management §2), which
-#     is their single source of truth. post_deploy_vars map to settings.* fields:
-#
-#       post_deploy_var   ← per-VM desired-state field        notes
-#       ───────────────────────────────────────────────────────────────────────
-#       nvidia_driver     ← settings.nvidia_driver            EXACT pinned build
-#                                                             (e.g. "570.158.01"),
-#                                                             NEVER the bare series
-#       cuda              ← settings.cuda                      e.g. "12-8" (when
-#                                                             settings.gpu: true)
-#
-#   - ROLE VAR-NAME HOP (the consumer MUST wire this): install_nvidia_driver
-#     requires the extra_var `nvidia_driver_version` (it asserts it is defined and
-#     carries NO pin of its own — defaults/main.yml). The consumer (Django Phase 7
-#     reconciler/executor) maps settings.nvidia_driver → extra_var
-#     nvidia_driver_version when invoking the role. post_deploy_vars names the
-#     desired-state contract (nvidia_driver/cuda); the role-internal name is the
-#     final hop the executor bridges.
-#   - UNTRUSTED-INPUT VALIDATION (the consumer's obligation, documented here):
-#     post_deploy_vars values flow from desired state into Ansible extra_vars. The
-#     reconciler's executor MUST format-validate them as untrusted input before the
-#     install runs — settings.nvidia_driver is a build-version string
-#     (e.g. ^[0-9]+\.[0-9]+\.[0-9]+$), NOT arbitrary text; settings.cuda is an apt
-#     coordinate (e.g. ^[0-9]+-[0-9]+$). This phase only DECLARES the contract; the
-#     validation is implemented consumer-side (Django Phase 7), not here.
-#   - EXACT-PIN at deploy (§C.4.1 / §5; criterion #5): install_nvidia_driver adds
-#     the NVIDIA CUDA repo, installs nvidia-driver-<series> from the NVIDIA repo,
-#     pins *nvidia* at Pin-Priority 1001, and apt-mark holds it — NEVER the floating
-#     -server metapackage. The pin source is the per-VM settings.nvidia_driver
-#     value, NOT a recipe constant. Verified post-deploy (§C.6.1; LCM Phase 3
+# PRODUCER/CONSUMER CONTRACT (binding — DAS Standard Two-Stage Model; §C.4.1).
+# The recipe declares the MECHANISM (which roles run + which var NAMES they
+# need); the VALUES come from the per-VM desired-state file (VM Management §2),
+# its single source of truth. The full table (post_deploy_var → settings.* field
+# → the Ansible extra_var the executor passes to the role) lives in README.md
+# "Deploy-time build — producer/consumer contract". The essentials the consumer
+# (Django Phase 7) MUST wire:
+#   - nvidia_driver ← settings.nvidia_driver (EXACT pinned build, e.g.
+#     "570.158.01"; NEVER the bare series) → install_nvidia_driver consumes it as
+#     the extra_var `nvidia_driver_version` (the role asserts it is defined and
+#     carries NO pin of its own — defaults/main.yml). install_nvidia_driver is
+#     DRIVER-ONLY (its meta) and pins the exact build per §C.4.1 (NVIDIA CUDA repo
+#     → nvidia-driver-<series> + apt pin 1001 + apt-mark hold; NEVER the floating
+#     -server metapackage). The pin source is settings.nvidia_driver, NOT a recipe
+#     constant (criterion #5). Verified post-deploy (§C.6.1; LCM Phase 3
 #     verify_host_driver) against the built clone.
+#   - cuda ← settings.cuda (e.g. "12-8", when settings.gpu: true) → consumed by a
+#     SEPARATE CUDA-toolkit deploy-time role. install_nvidia_driver does NOT
+#     install CUDA. NOTE (prerequisite, surfaced — NOT this PR): a CUDA-toolkit
+#     role that provides `nvcc` is NOT yet present in mdc-ansible-collections
+#     (install_nvidia_toolkit is the NVIDIA *container* toolkit for Docker, not
+#     CUDA). §C.8 names "install_nvidia_driver installs driver + CUDA" — that is
+#     imprecise vs the driver-only role; flagged for the architecture/PM3 session.
+#     `cuda` declares the §C.8/§C.6.1 desired-state contract now; its install role
+#     + registration here is a BLOCKING prerequisite for the post-deploy GPU
+#     contract (the nvcc_present assertion) to go live. See README + PR body.
+#   - UNTRUSTED-INPUT VALIDATION (consumer obligation, documented here): both
+#     values flow from desired state into Ansible extra_vars; the executor MUST
+#     format-validate them as untrusted input before the install runs
+#     (settings.nvidia_driver ~ ^[0-9]+\.[0-9]+\.[0-9]+$; settings.cuda ~
+#     ^[0-9]+-[0-9]+$ — not arbitrary text). Implemented consumer-side, not here.
 runtime:
   post_deploy_roles:
-    - skyy_net.common.install_nvidia_driver   # the role (the mechanism) — FQCN, generic, idempotent
+    - skyy_net.common.install_nvidia_driver   # driver only (FQCN, generic, idempotent); CUDA-toolkit role TBD (see contract)
   post_deploy_vars:
-    - nvidia_driver                           # var NAME; value: settings.nvidia_driver (per-VM file)
-    - cuda                                    # var NAME; value: settings.cuda (per-VM file)
+    - nvidia_driver                           # value: settings.nvidia_driver → role extra_var nvidia_driver_version
+    - cuda                                    # value: settings.cuda → CUDA-toolkit role (TBD; see contract)
 
 # Stage 2 conformance: the EXECUTOR is the conformance role's
 # tasks/customer-workload-server.yml (DAS Template Standard §6.2 + Appendix C
@@ -153,10 +147,8 @@ runtime:
 # the conformance role is the executor and does NOT remove the recipe-side
 # obligation). The GPU-stack assertions carry requires_post_deploy: true so the
 # bake gate skips them; they run against the built clone post-deploy (§C.6.1).
-#
-# COMPANION (mdc-ansible-collections, NOT this PR): the conformance role task must
-# be updated to match this GPU-less spec — relocate the GPU assertions out of the
-# bake gate and assert the full §2-universal block. See PR body.
+# (The conformance-role relocate is a BLOCKING companion in mdc-ansible-collections
+# — it currently asserts GPU at bake AND lacks the full §2 block; see README + PR body.)
 
 # Artifact storage (DAS Stage 3 writes the RBD image + __base__ snapshot).
 artifact:

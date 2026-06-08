@@ -15,10 +15,10 @@ VM's life. So it is **built at deploy, NOT baked**:
   class base requirements only (root SSH + ansible key + qemu-guest-agent +
   swap-off + DHCP + cloud-init NoCloud). No NVIDIA driver, no CUDA, no
   container-toolkit, no vendor agent.
-- **Stage 2 — built at deploy (per-VM):** the exact-pinned NVIDIA driver + CUDA,
-  installed into the running clone by the `install_nvidia_driver` role
-  (registered as a `runtime.post_deploy_role` below), reconciled on Day-2 by the
-  same workflow.
+- **Stage 2 — built at deploy (per-VM):** the exact-pinned NVIDIA driver
+  (`install_nvidia_driver`, registered as a `runtime.post_deploy_role` below) +
+  the CUDA toolkit (a separate role — see the contract section), installed into
+  the running clone and reconciled on Day-2 by the same workflow.
 
 **One generic GPU-less base serves every GPU class** (docker-internal host, Flux
 Edge / mining host, k3s-2 GPU node) — there is no `-fluxedge` GPU-baked variant.
@@ -60,17 +60,32 @@ The recipe declares the **mechanism** (`runtime.post_deploy_roles` +
 `post_deploy_vars`); the **values** come from the per-VM desired-state file (VM
 Management §2). The contract the consumer (Django Phase 7) wires against:
 
-| `post_deploy_var` | ← per-VM desired-state field | role-internal var (executor maps to) |
-|---|---|---|
-| `nvidia_driver` | `settings.nvidia_driver` (EXACT build, e.g. `570.158.01`) | `nvidia_driver_version` |
-| `cuda` | `settings.cuda` (e.g. `12-8`) | (CUDA toolkit role/step) |
+| `post_deploy_var` | ← per-VM desired-state field | role that consumes it | Ansible extra_var the executor passes |
+|---|---|---|---|
+| `nvidia_driver` | `settings.nvidia_driver` (EXACT build, e.g. `570.158.01`; NEVER the bare series) | `install_nvidia_driver` (driver only) | `nvidia_driver_version` |
+| `cuda` | `settings.cuda` (e.g. `12-8`, when `settings.gpu: true`) | CUDA-toolkit role — **TBD, does not exist yet** (see prerequisite below) | _TBD with the role_ |
 
 The executor MUST format-validate these as **untrusted input** (build-version
-string, apt coordinate — not arbitrary text) before the install runs. The
-`install_nvidia_driver` role installs the **exact pinned build** (NVIDIA CUDA
-repo → `nvidia-driver-<series>` + apt pin 1001 + `apt-mark hold`; NEVER the
-floating `-server` metapackage); the pin source is `settings.nvidia_driver`, NOT
-a recipe constant. See the recipe's `runtime:` block comment for the full contract.
+string `^[0-9]+\.[0-9]+\.[0-9]+$`, apt coordinate `^[0-9]+-[0-9]+$` — not
+arbitrary text) before the install runs; that validation is implemented
+consumer-side (Django Phase 7), not in this recipe.
+
+`install_nvidia_driver` is **driver-only** (its own role meta) and installs the
+**exact pinned build** (NVIDIA CUDA repo → `nvidia-driver-<series>` + apt pin
+1001 + `apt-mark hold`; NEVER the floating `-server` metapackage); the pin source
+is `settings.nvidia_driver`, NOT a recipe constant. It consumes the extra_var
+`nvidia_driver_version` (it asserts that var is defined and carries no pin of its
+own), so the executor maps `settings.nvidia_driver → nvidia_driver_version`.
+
+**Prerequisite (surfaced — NOT this PR):** `settings.cuda` and the `nvcc_present`
+post-deploy assertion need a **CUDA-toolkit role** (one that installs `nvcc`).
+No such role exists yet in `mdc-ansible-collections` — `install_nvidia_toolkit`
+there is the NVIDIA **container** toolkit (the Docker GPU runtime), NOT the CUDA
+toolkit. DAS Template §C.8 names "`install_nvidia_driver` installs driver + CUDA,"
+which is imprecise against the driver-only role; this is flagged for the
+architecture/PM3 session. `cuda` is declared now per the §C.8/§C.6.1 contract; it
+goes live once a CUDA-toolkit role is authored and added to
+`runtime.post_deploy_roles`.
 
 ## Conformance
 
@@ -91,11 +106,32 @@ Template Consumption Standard §3, retags net0 to the workload VLAN, attaches th
 dedicated GPU via PCIe passthrough, runs the deploy-time GPU build, then installs
 FluxCore live.
 
-## Companion changes (mdc-ansible-collections, NOT this recipe PR)
+## Companion changes (mdc-ansible-collections — BLOCKING prerequisites for re-bake)
 
-The recipe leads; these executor-side changes land alongside the re-bake:
+The recipe leads; these executor-side changes in `mdc-ansible-collections` are
+**blocking** — DAS Stage 2 will FAIL on every GPU-less bake until they land, so
+do **not** re-bake this recipe until they merge (the recipe PR is the spec; these
+make the executor match it):
 
-- `das_ubuntu_24_server_customer_workload.yml` re-modeled GPU-less (strip the
-  NVIDIA/CUDA bake tasks).
-- `conformance/tasks/customer-workload-server.yml` updated — relocate the GPU
-  assertions out of the bake gate; assert the full §2-universal block.
+- **`das_ubuntu_24_server_customer_workload.yml` re-modeled GPU-less** — strip the
+  NVIDIA-570 / CUDA bake tasks AND the baked apt-pin file (`/etc/apt/preferences.d/`
+  nvidia pin). If left in, the baked pin fights the deploy-time
+  `install_nvidia_driver` pin on any VM whose `settings.nvidia_driver` ≠ the baked
+  `570.158.01` (apt resolves the two preference files by filename order).
+- **`conformance/tasks/customer-workload-server.yml` updated** — (a) relocate the
+  five GPU assertions out of the bake gate (they fail on a GPU-less bake clone);
+  (b) **add the full §2-universal block** — the executor today only asserts
+  `qemu_guest_agent_active` + the GPU stack + `no_vendor_agent_unit_files`, so it
+  is missing `swap_off`, `curl_installed`, `root_ssh_via_ansible_key`,
+  `sudoers_no_requiretty`, `netplan_no_static_config`,
+  `cloud_init_nocloud_datasource_active`, `qemu_guest_agent_enabled`,
+  `no_operator_accounts_leaked` (the §6.4 layered block this recipe's
+  `automated.yaml` now specs); (c) the post-deploy driver check should use
+  `--query-gpu=driver_version` (hardware-level, matching this recipe's spec), not
+  the software-only `--version`.
+
+And the downstream **operator / pipeline** step (not a code change):
+
+- **Re-bake + golden-template publish** — rebuild the GPU-less template and
+  register the new VMID in `<desired-state>/vm/golden_templates/` once the two
+  companions above land.
