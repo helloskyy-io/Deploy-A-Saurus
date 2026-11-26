@@ -33,9 +33,9 @@ Each entry tells you **when to read the standard**. Do not pull every standard i
 
 ### Documentation (read when writing docs)
 
-- **[Documentation Standard](edge-assistant/standards/documentation/documentation_standard.md)** — **read when** creating or revising any planning doc in mdc-master-planning, or when the recipe-authoring conventions need cross-referencing. Covers sprint sub-item format, loose-ends convention, CLAUDE.md governance.
+- **Documentation Standard (`edge-assistant/standards/documentation/documentation_standard.md`)** — **read when** creating or revising any planning doc in mdc-master-planning, or when the recipe-authoring conventions need cross-referencing. Covers sprint sub-item format, loose-ends convention, CLAUDE.md governance.
 
-> **Note:** Temporal Standard, Persistent Storage Standard, and SSH Key Management Standard are NOT listed here per the [CLAUDE.md governance rule](edge-assistant/standards/documentation/documentation_standard.md). This repo contains recipe YAML only — no Temporal workflow code (lives in `skyy-command`), no Helm chart code that defines storage (lives in `skyy-command/deployments/` and consuming-service repos), no Python that manages SSH keys. Workflows that EXECUTE recipes are governed by `skyy-command`'s CLAUDE.md.
+> **Note:** Temporal Standard, Persistent Storage Standard, and SSH Key Management Standard are NOT listed here per the CLAUDE.md governance rule (`edge-assistant/standards/documentation/documentation_standard.md`). This repo contains recipe YAML only — no Temporal workflow code (lives in `skyy-command`), no Helm chart code that defines storage (lives in `skyy-command/deployments/` and consuming-service repos), no Python that manages SSH keys. Workflows that EXECUTE recipes are governed by `skyy-command`'s CLAUDE.md.
 
 ## Planning Docs (in mdc-master-planning)
 
