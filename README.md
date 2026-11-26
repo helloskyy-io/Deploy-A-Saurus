@@ -68,7 +68,7 @@ recipes/<name>/
 
 ## Standards
 
-All DAS development follows the [DAS Standard](/opt/skyy-net/mdc-master-planning/standards/development/deploy-a-saurus/das_standard.md).
+All DAS development follows the [DAS Standard](/opt/skyy-net/mdc-master-planning/standards/deploy-a-saurus/das_standard.md).
 
 ## Related Repos
 
